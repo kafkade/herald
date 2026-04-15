@@ -16,3 +16,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bearer token authentication for admin endpoints
 - Health check endpoint (unauthenticated) returning status, version, and uptime
 - 17 integration tests covering all API endpoints and error cases
+- CLI binary (`herald`) with subcommands: serve, watch, push, countdown, queue, config
