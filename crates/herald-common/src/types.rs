@@ -195,9 +195,7 @@ pub enum ServerMessage {
 
     /// Heartbeat — server sends periodically to keep the connection alive.
     #[serde(rename = "heartbeat")]
-    Heartbeat {
-        server_time: DateTime<Utc>,
-    },
+    Heartbeat { server_time: DateTime<Utc> },
 
     /// Queue metadata — sent alongside board_update for status bar rendering.
     #[serde(rename = "queue_info")]
@@ -210,15 +208,11 @@ pub enum ServerMessage {
 
     /// Server is shutting down — clients should expect disconnection.
     #[serde(rename = "shutdown")]
-    Shutdown {
-        reason: String,
-    },
+    Shutdown { reason: String },
 
     /// Error notification.
     #[serde(rename = "error")]
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 /// Messages sent from a viewer client to the server over WebSocket.

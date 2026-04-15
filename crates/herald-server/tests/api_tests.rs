@@ -643,12 +643,7 @@ async fn ws_route_exists_and_is_public() {
 
     // GET /ws without upgrade headers reaches the WS handler (not auth-blocked)
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/ws")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/ws").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -672,8 +667,7 @@ async fn ws_upgrade_succeeds() {
 
     // Connect with a real WebSocket client
     let url = format!("ws://{addr}/ws");
-    let (ws_stream, response) =
-        tokio_tungstenite::connect_async(&url).await.unwrap();
+    let (ws_stream, response) = tokio_tungstenite::connect_async(&url).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
 
@@ -712,14 +706,11 @@ async fn ws_broadcast_delivers_message() {
     state.broadcast_tx().send(msg).unwrap();
 
     // Client should receive the message
-    let received = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        ws_stream.next(),
-    )
-    .await
-    .expect("timeout waiting for WS message")
-    .expect("stream ended")
-    .expect("WS error");
+    let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+        .await
+        .expect("timeout waiting for WS message")
+        .expect("stream ended")
+        .expect("WS error");
 
     if let tokio_tungstenite::tungstenite::Message::Text(text) = received {
         let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();

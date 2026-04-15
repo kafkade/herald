@@ -1,5 +1,5 @@
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use tokio::sync::broadcast;
 
@@ -7,10 +7,7 @@ use crate::state::AppState;
 
 /// Handle WebSocket upgrade request.
 /// This endpoint is unauthenticated — any viewer can connect.
-pub async fn ws_upgrade(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_connection(socket, state))
 }
 
