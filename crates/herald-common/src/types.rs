@@ -183,6 +183,53 @@ impl Default for BoardState {
     }
 }
 
+// ── WebSocket protocol ───────────────────────────────────────────
+
+/// Messages sent from the server to connected viewers over WebSocket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ServerMessage {
+    /// Full board state — sent on initial connection and on every board change.
+    #[serde(rename = "board_update")]
+    BoardUpdate(BoardState),
+
+    /// Heartbeat — server sends periodically to keep the connection alive.
+    #[serde(rename = "heartbeat")]
+    Heartbeat {
+        server_time: DateTime<Utc>,
+    },
+
+    /// Queue metadata — sent alongside board_update for status bar rendering.
+    #[serde(rename = "queue_info")]
+    QueueInfo {
+        current_index: usize,
+        total_items: usize,
+        next_rotation_seconds: u32,
+        is_countdown_active: bool,
+    },
+
+    /// Server is shutting down — clients should expect disconnection.
+    #[serde(rename = "shutdown")]
+    Shutdown {
+        reason: String,
+    },
+
+    /// Error notification.
+    #[serde(rename = "error")]
+    Error {
+        message: String,
+    },
+}
+
+/// Messages sent from a viewer client to the server over WebSocket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ClientMessage {
+    /// Response to a heartbeat.
+    #[serde(rename = "pong")]
+    Pong,
+}
+
 // ── API request/response DTOs ─────────────────────────────────────
 
 /// Request body for POST /api/messages.

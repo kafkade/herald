@@ -1,6 +1,7 @@
 pub mod api;
 pub mod db;
 pub mod state;
+pub mod ws;
 
 use axum::Router;
 use axum::middleware;
@@ -40,5 +41,6 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .nest("/api", admin_api)
         .nest("/api", public_api)
+        .route("/ws", get(ws::ws_upgrade))
         .with_state(state)
 }
