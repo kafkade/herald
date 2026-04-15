@@ -32,7 +32,7 @@ Herald is an open-source, split-flap / Vestaboard-style digital message board an
 
 ```
 ┌──────────────────────────────────────────────┐
-│  H E L L O   W O R L D · · · · · · · · · ·  │
+│  H E L L O   W O R L D · · · · · · · · · ·   │
 │  · · · · · · · · · · · · · · · · · · · · · · │
 │  · · · · · · · · · · · · · · · · · · · · · · │
 │  · · · · · · · · · · · · · · · · · · · · · · │
@@ -93,21 +93,21 @@ herald watch
 Herald is structured as a Cargo workspace with three main crates and a shared library:
 
 ```
-                 ┌──────────────────────┐
+                 ┌───────────────────────┐
                  │    herald-server      │
                  │    (Axum + SQLite)    │
-                 └───┬─────────────┬────┘
+                 └───┬─────────────┬─────┘
           REST API   │             │  WebSocket
          (admin ops) │             │  (real-time push)
                      │             │
              ┌───────┘             └───────┐
              │                             │
-  ┌──────────▼───────────┐   ┌────────────▼───────────┐
+  ┌──────────▼───────────┐   ┌────────────▼────────────┐
   │     herald-cli       │   │      herald-web         │
   │  (ratatui terminal)  │   │    (Leptos → Wasm)      │
-  └──────────┬───────────┘   └────────────┬───────────┘
-             │                            │
-             └──────────┬─────────────────┘
+  └──────────┬───────────┘   └────────────┬────────────┘
+             │                             │
+             └──────────┬──────────────────┘
                         │
               ┌─────────▼──────────┐
               │   herald-common    │
