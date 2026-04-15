@@ -49,7 +49,15 @@ crates/
 
 ## Git Policy
 
-**Never execute Git commands that modify history or submit code.** This includes `git commit`, `git push`, `git rebase`, `git merge`, `git reset`, `git cherry-pick`, `git revert`, and `git tag`. Read-only commands like `git status`, `git diff`, `git log`, and `git branch` are fine. A human must always review and commit code themselves.
+**Never execute Git commands that modify history or submit code.** This includes:
+
+- `git commit` (including `--amend`)
+- `git push` (including `--force`, `--force-with-lease`)
+- `git rebase`, `git merge`, `git reset`, `git cherry-pick`, `git revert`, `git tag`
+
+Read-only commands like `git status`, `git diff`, `git log`, and `git branch` are fine. A human must always review and commit code themselves.
+
+**Never create or merge pull requests** via GitHub MCP tools, `gh` CLI, or any other mechanism. PR creation and management is the sole responsibility of the human developer.
 
 ## Key References
 
