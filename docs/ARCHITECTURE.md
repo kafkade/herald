@@ -46,41 +46,41 @@
                        │                      HERALD SERVER                       │
                        │                   (herald-server crate)                  │
                        │                                                          │
-  ┌──────────┐         │  ┌─────────────┐     ┌───────────────┐                  │
-  │  Admin   │  REST   │  │             │     │   Rotation    │                  │
-  │  (curl / │ ──────► │  │  Axum       │     │   Timer       │                  │
-  │  CLI)    │  HTTP   │  │  Router     │     │   (tokio      │                  │
-  └──────────┘         │  │             │     │    interval)  │                  │
-       │               │  │  ┌────────┐ │     └──────┬────────┘                  │
-       │ Bearer        │  │  │ REST   │ │            │                           │
-       │ Token         │  │  │ API    │ │            │ next item                 │
-       │ Auth          │  │  │ Hdlrs  │ │            ▼                           │
-       ▼               │  │  └───┬────┘ │     ┌───────────────┐                  │
-  ┌──────────┐         │  │      │      │     │  Board State  │                  │
-  │  Auth    │         │  │      │      │     │  Manager      │◄──── Computes   │
-  │  Layer   │         │  │      ▼      │     │  (AppState)   │      6×22 grid  │
-  └──────────┘         │  │  ┌────────┐ │     └──────┬────────┘                  │
-                       │  │  │ WS     │ │            │                           │
-                       │  │  │ Hdlr   │ │            │ broadcast                 │
-                       │  │  └───┬────┘ │            ▼                           │
-                       │  └──────┼──────┘     ┌───────────────┐                  │
-                       │         │            │  Broadcast     │                  │
-                       │         │            │  Channel       │                  │
-                       │         │            │  (tokio)       │                  │
-                       │         │            └──────┬────────┘                  │
-                       │         │                   │                           │
-                       │  ┌──────┴──────┐            │                           │
-                       │  │  Static     │            │                           │
-                       │  │  File       │            │                           │
-                       │  │  Server     │            │                           │
-                       │  │  (Wasm/CSS) │            │                           │
-                       │  └─────────────┘            │                           │
-                       │                             │                           │
-                       │  ┌─────────────┐            │                           │
-                       │  │  SQLite     │◄───────────┤                           │
-                       │  │  (sqlx)     │  persist   │                           │
-                       │  └─────────────┘            │                           │
-                       └──────────────┬──────────────┼───────────────────────────┘
+  ┌──────────┐         │  ┌─────────────┐     ┌───────────────┐                   │
+  │  Admin   │  REST   │  │             │     │   Rotation    │                   │
+  │  (curl / │ ──────► │  │  Axum       │     │   Timer       │                   │
+  │  CLI)    │  HTTP   │  │  Router     │     │   (tokio      │                   │
+  └──────────┘         │  │             │     │    interval)  │                   │
+       │               │  │  ┌────────┐ │     └──────┬────────┘                   │
+       │ Bearer        │  │  │ REST   │ │            │                            │
+       │ Token         │  │  │ API    │ │            │ next item                  │
+       │ Auth          │  │  │ Hdlrs  │ │            ▼                            │
+       ▼               │  │  └───┬────┘ │     ┌───────────────┐                   │
+  ┌──────────┐         │  │      │      │     │  Board State  │                   │
+  │  Auth    │         │  │      │      │     │  Manager      │◄──── Computes     │
+  │  Layer   │         │  │      ▼      │     │  (AppState)   │      6×22 grid    │
+  └──────────┘         │  │  ┌────────┐ │     └──────┬────────┘                   │
+                       │  │  │ WS     │ │            │                            │
+                       │  │  │ Hdlr   │ │            │ broadcast                  │
+                       │  │  └───┬────┘ │            ▼                            │
+                       │  └──────┼──────┘     ┌───────────────┐                   │
+                       │         │            │  Broadcast    │                   │
+                       │         │            │  Channel      │                   │
+                       │         │            │  (tokio)      │                   │
+                       │         │            └──────┬────────┘                   │
+                       │         │                   │                            │
+                       │  ┌──────┴──────┐            │                            │
+                       │  │  Static     │            │                            │
+                       │  │  File       │            │                            │
+                       │  │  Server     │            │                            │
+                       │  │  (Wasm/CSS) │            │                            │
+                       │  └─────────────┘            │                            │
+                       │                             │                            │
+                       │  ┌─────────────┐            │                            │
+                       │  │  SQLite     │◄───────────┤                            │
+                       │  │  (sqlx)     │  persist   │                            │
+                       │  └─────────────┘            │                            │
+                       └──────────────┬──────────────┼────────────────────────────┘
                                       │              │
                            ┌──────────┴───┐    ┌─────┴─────────────┐
                            │  WebSocket   │    │  WebSocket        │
@@ -720,40 +720,40 @@ This is the primary write path — an admin creates a new message and it appears
 
 ```
   Admin (curl/CLI)                Herald Server                       Viewers
-       │                               │                                │
-       │  POST /api/messages            │                                │
-       │  Authorization: Bearer <token> │                                │
-       │  { grid: [[...]], label: ... } │                                │
-       │──────────────────────────────►│                                │
-       │                               │                                │
-       │                    ┌──────────┴──────────┐                     │
-       │                    │ 1. Validate auth     │                     │
-       │                    │ 2. Validate grid     │                     │
+       │                               │                                  │
+       │  POST /api/messages            │                                 │
+       │  Authorization: Bearer <token> │                                 │
+       │  { grid: [[...]], label: ... } │                                 │
+       │──────────────────────────────►│                                  │
+       │                               │                                  │
+       │                    ┌──────────┴────────────┐                     │
+       │                    │ 1. Validate auth      │                     │
+       │                    │ 2. Validate grid      │                     │
        │                    │    (6×22, valid chars)│                     │
        │                    │ 3. Generate UUID      │                     │
        │                    │ 4. INSERT into SQLite │                     │
        │                    │ 5. Add to queue       │                     │
-       │                    └──────────┬──────────┘                     │
-       │                               │                                │
-       │  201 Created                  │                                │
-       │  { id: "...", position: 3 }   │                                │
-       │◄──────────────────────────────│                                │
-       │                               │                                │
-       │                    ┌──────────┴──────────┐                     │
-       │                    │ 6. If message has    │                     │
-       │                    │    priority          │                     │
-       │                    │    "immediate"       │                     │
-       │                    │    → recompute board │                     │
-       │                    │    → broadcast       │                     │
-       │                    │ 7. Else: queued for  │                     │
-       │                    │    next rotation slot│                     │
-       │                    └──────────┬──────────┘                     │
-       │                               │                                │
-       │                               │  ServerMessage::BoardState     │
-       │                               │  { cells: [[...]] }            │
-       │                               │───────────────────────────────►│
-       │                               │        (to ALL connected       │
-       │                               │         WebSocket clients)     │
+       │                    └──────────┬────────────┘                     │
+       │                               │                                  │
+       │  201 Created                  │                                  │
+       │  { id: "...", position: 3 }   │                                  │
+       │◄──────────────────────────────│                                  │
+       │                               │                                  │
+       │                    ┌──────────┴───────────┐                      │
+       │                    │ 6. If message has    │                      │
+       │                    │    priority          │                      │
+       │                    │    "immediate"       │                      │
+       │                    │    → recompute board │                      │
+       │                    │    → broadcast       │                      │
+       │                    │ 7. Else: queued for  │                      │
+       │                    │    next rotation slot│                      │
+       │                    └──────────┬───────────┘                      │
+       │                               │                                  │
+       │                               │  ServerMessage::BoardState       │
+       │                               │  { cells: [[...]] }              │
+       │                               │───────────────────────────────►  │
+       │                               │        (to ALL connected         │
+       │                               │         WebSocket clients)       │
 ```
 
 ### 4.2 Rotation Timer Fires
@@ -762,32 +762,32 @@ The rotation engine advances through the queue automatically.
 
 ```
   Rotation Task (tokio::interval)     AppState              Broadcast Channel
-       │                                  │                        │
-       │  timer tick (every N seconds)    │                        │
-       │─────────────────────────────────►│                        │
-       │                                  │                        │
-       │              ┌───────────────────┴───────────┐            │
-       │              │ 1. Load next queue item from  │            │
-       │              │    SQLite (advance index)     │            │
-       │              │ 2. If QueueItem::Message:     │            │
-       │              │    → use stored grid as-is    │            │
-       │              │ 3. If QueueItem::Countdown:   │            │
-       │              │    → compute remaining time   │            │
-       │              │    → format onto 6×22 grid    │            │
-       │              │ 4. Build new BoardState       │            │
-       │              │ 5. Update active_item_id      │            │
-       │              │ 6. Reset seconds_until_rot.   │            │
-       │              └───────────────────┬───────────┘            │
-       │                                  │                        │
-       │                                  │  broadcast.send()      │
-       │                                  │───────────────────────►│
-       │                                  │                        │
+       │                                  │                                 │
+       │  timer tick (every N seconds)    │                                 │
+       │─────────────────────────────────►│                                 │
+       │                                  │                                 │
+       │              ┌───────────────────┴───────────┐                     │
+       │              │ 1. Load next queue item from  │                     │
+       │              │    SQLite (advance index)     │                     │
+       │              │ 2. If QueueItem::Message:     │                     │
+       │              │    → use stored grid as-is    │                     │
+       │              │ 3. If QueueItem::Countdown:   │                     │
+       │              │    → compute remaining time   │                     │
+       │              │    → format onto 6×22 grid    │                     │
+       │              │ 4. Build new BoardState       │                     │
+       │              │ 5. Update active_item_id      │                     │
+       │              │ 6. Reset seconds_until_rot.   │                     │
+       │              └───────────────────┬───────────┘                     │
+       │                                  │                                 │
+       │                                  │  broadcast.send()               │
+       │                                  │───────────────────────►         │
+       │                                  │                                 │
        │                                  │           ┌────────────┴────────┐
        │                                  │           │ Fan out to all      │
        │                                  │           │ subscriber Rx       │
        │                                  │           │ channels            │
        │                                  │           └────────────┬────────┘
-       │                                  │                        │
+       │                                  │                                 │
        │                                  │                 CLI ◄──┤
        │                                  │                 Web ◄──┤
        │                                  │                 ... ◄──┘
@@ -799,29 +799,29 @@ When the active queue item is a countdown, the board must update more frequently
 
 ```
   Countdown Tick Task                AppState                  Viewers
-       │                                │                         │
-       │  tick (1s or 60s depending     │                         │
-       │        on active countdown     │                         │
-       │        format)                 │                         │
-       │───────────────────────────────►│                         │
-       │                                │                         │
-       │            ┌───────────────────┴──────────┐              │
-       │            │ 1. Check if active item is a │              │
-       │            │    Countdown (else skip)      │              │
-       │            │ 2. Recompute remaining time   │              │
-       │            │ 3. Re-render countdown grid   │              │
-       │            │ 4. Diff against BoardState    │              │
-       │            │ 5. If changed → build new     │              │
+       │                                │                           │
+       │  tick (1s or 60s depending     │                           │
+       │        on active countdown     │                           │
+       │        format)                 │                           │
+       │───────────────────────────────►│                           │
+       │                                │                           │
+       │            ┌───────────────────┴────────────┐              │
+       │            │ 1. Check if active item is a   │              │
+       │            │    Countdown (else skip)       │              │
+       │            │ 2. Recompute remaining time    │              │
+       │            │ 3. Re-render countdown grid    │              │
+       │            │ 4. Diff against BoardState     │              │
+       │            │ 5. If changed → build new      │              │
        │            │    state and broadcast         │              │
        │            │ 6. If countdown hit zero:      │              │
        │            │    → apply zero_behavior       │              │
        │            │    (ShowMessage/Remove/Hold)   │              │
-       │            └───────────────────┬──────────┘              │
-       │                                │                         │
-       │                                │  BoardState (if         │
-       │                                │  digits changed)        │
-       │                                │────────────────────────►│
-       │                                │                         │
+       │            └───────────────────┬────────────┘              │
+       │                                │                           │
+       │                                │  BoardState (if           │
+       │                                │  digits changed)          │
+       │                                │────────────────────────►  │
+       │                                │                           │
 ```
 
 ### 4.4 New Viewer Connects
@@ -837,14 +837,14 @@ A newly connected viewer must immediately see the current board — no waiting f
        │  101 Switching Protocols       │
        │◄───────────────────────────────│
        │                                │
-       │                 ┌──────────────┴──────────┐
+       │                 ┌──────────────┴───────────┐
        │                 │ 1. Accept WS connection  │
        │                 │ 2. Subscribe to broadcast│
        │                 │    channel (new Rx)      │
        │                 │ 3. Read current          │
        │                 │    BoardState from       │
        │                 │    AppState              │
-       │                 └──────────────┬──────────┘
+       │                 └──────────────┬───────────┘
        │                                │
        │  ServerMessage::BoardState     │
        │  (current board - immediate)   │
@@ -921,7 +921,7 @@ pub struct AppState {
 Each WebSocket connection is managed by a dedicated Tokio task that is split into two halves:
 
 ```
-                   ┌──────────────────────────────────┐
+                   ┌───────────────────────────────────┐
                    │      Per-Connection Task          │
                    │                                   │
   broadcast::Rx ──►│  Write half:                      │──► WebSocket sink
@@ -930,7 +930,7 @@ Each WebSocket connection is managed by a dedicated Tokio task that is split int
   WebSocket     ──►│  Read half:                       │──► (process pongs,
   stream           │   loop { msg = ws.recv() }        │     detect disconnect)
                    │                                   │
-                   └──────────────────────────────────┘
+                   └───────────────────────────────────┘
 ```
 
 **Broadcast channel semantics:**
