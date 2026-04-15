@@ -23,13 +23,14 @@ pub async fn init_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
 
 // ── Messages ──────────────────────────────────────────────────────
 
-pub async fn create_message(
-    pool: &SqlitePool,
-    msg: &Message,
-) -> Result<(), sqlx::Error> {
+pub async fn create_message(pool: &SqlitePool, msg: &Message) -> Result<(), sqlx::Error> {
     let grid_json = serde_json::to_string(&msg.grid).unwrap();
-    let h_align = serde_json::to_string(&msg.h_align).unwrap().replace('"', "");
-    let v_align = serde_json::to_string(&msg.v_align).unwrap().replace('"', "");
+    let h_align = serde_json::to_string(&msg.h_align)
+        .unwrap()
+        .replace('"', "");
+    let v_align = serde_json::to_string(&msg.v_align)
+        .unwrap()
+        .replace('"', "");
     let id = msg.id.to_string();
     let created = msg.created_at.to_rfc3339();
     let expires = msg.expires_at.map(|d| d.to_rfc3339());
@@ -56,13 +57,10 @@ pub async fn list_messages(pool: &SqlitePool) -> Result<Vec<Message>, sqlx::Erro
         .fetch_all(pool)
         .await?;
 
-    Ok(rows.iter().map(|r| row_to_message(r)).collect())
+    Ok(rows.iter().map(row_to_message).collect())
 }
 
-pub async fn get_message(
-    pool: &SqlitePool,
-    id: &str,
-) -> Result<Option<Message>, sqlx::Error> {
+pub async fn get_message(pool: &SqlitePool, id: &str) -> Result<Option<Message>, sqlx::Error> {
     let row = sqlx::query("SELECT * FROM messages WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)
@@ -125,10 +123,7 @@ pub async fn update_message(
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn delete_message(
-    pool: &SqlitePool,
-    id: &str,
-) -> Result<bool, sqlx::Error> {
+pub async fn delete_message(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM messages WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -163,10 +158,7 @@ fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> Message {
 
 // ── Countdowns ────────────────────────────────────────────────────
 
-pub async fn create_countdown(
-    pool: &SqlitePool,
-    cd: &Countdown,
-) -> Result<(), sqlx::Error> {
+pub async fn create_countdown(pool: &SqlitePool, cd: &Countdown) -> Result<(), sqlx::Error> {
     let id = cd.id.to_string();
     let target = cd.target.to_rfc3339();
     let zero_json = serde_json::to_string(&cd.zero_behavior).unwrap();
@@ -190,18 +182,14 @@ pub async fn create_countdown(
 }
 
 pub async fn list_countdowns(pool: &SqlitePool) -> Result<Vec<Countdown>, sqlx::Error> {
-    let rows =
-        sqlx::query("SELECT * FROM countdowns ORDER BY queue_position ASC, created_at ASC")
-            .fetch_all(pool)
-            .await?;
+    let rows = sqlx::query("SELECT * FROM countdowns ORDER BY queue_position ASC, created_at ASC")
+        .fetch_all(pool)
+        .await?;
 
-    Ok(rows.iter().map(|r| row_to_countdown(r)).collect())
+    Ok(rows.iter().map(row_to_countdown).collect())
 }
 
-pub async fn get_countdown(
-    pool: &SqlitePool,
-    id: &str,
-) -> Result<Option<Countdown>, sqlx::Error> {
+pub async fn get_countdown(pool: &SqlitePool, id: &str) -> Result<Option<Countdown>, sqlx::Error> {
     let row = sqlx::query("SELECT * FROM countdowns WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)
@@ -254,10 +242,7 @@ pub async fn update_countdown(
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn delete_countdown(
-    pool: &SqlitePool,
-    id: &str,
-) -> Result<bool, sqlx::Error> {
+pub async fn delete_countdown(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM countdowns WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -383,10 +368,7 @@ fn derive_message_label(grid_json: &str) -> String {
 }
 
 /// Reorder queue items: rewrite queue_position for both messages and countdowns.
-pub async fn reorder_queue(
-    pool: &SqlitePool,
-    order: &[uuid::Uuid],
-) -> Result<(), sqlx::Error> {
+pub async fn reorder_queue(pool: &SqlitePool, order: &[uuid::Uuid]) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
     for (pos, id) in order.iter().enumerate() {

@@ -1,7 +1,7 @@
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::Json;
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -15,9 +15,7 @@ pub async fn create(
     Json(req): Json<CreateMessageRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate grid dimensions
-    req.grid
-        .validate()
-        .map_err(|e| ApiError::BadRequest(e))?;
+    req.grid.validate().map_err(ApiError::BadRequest)?;
 
     let position = match req.queue_position {
         Some(p) => p,
@@ -39,9 +37,7 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(msg)))
 }
 
-pub async fn list(
-    State(state): State<AppState>,
-) -> Result<Json<ListResponse<Message>>, ApiError> {
+pub async fn list(State(state): State<AppState>) -> Result<Json<ListResponse<Message>>, ApiError> {
     let messages = db::list_messages(state.pool()).await?;
     let total = messages.len();
     Ok(Json(ListResponse {
@@ -67,7 +63,7 @@ pub async fn update(
 ) -> Result<Json<Message>, ApiError> {
     // Validate grid if provided
     if let Some(ref grid) = req.grid {
-        grid.validate().map_err(|e| ApiError::BadRequest(e))?;
+        grid.validate().map_err(ApiError::BadRequest)?;
     }
 
     let updated = db::update_message(state.pool(), &id, &req).await?;
