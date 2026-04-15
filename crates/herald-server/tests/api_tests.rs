@@ -634,3 +634,92 @@ async fn config_update_empty_returns_400() {
 
     cleanup(&db_path);
 }
+
+// ── WebSocket ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn ws_route_exists_and_is_public() {
+    let (app, db_path) = test_app().await;
+
+    // GET /ws without upgrade headers reaches the WS handler (not auth-blocked)
+    let response = app
+        .oneshot(Request::builder().uri("/ws").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    // Route exists (not 404) and no auth required (not 401)
+    assert_ne!(response.status(), StatusCode::NOT_FOUND);
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    cleanup(&db_path);
+}
+
+#[tokio::test]
+async fn ws_upgrade_succeeds() {
+    let (app, db_path) = test_app().await;
+
+    // Start a real TCP server so the WebSocket handshake can complete
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Connect with a real WebSocket client
+    let url = format!("ws://{addr}/ws");
+    let (ws_stream, response) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
+
+    // Clean shutdown
+    drop(ws_stream);
+    cleanup(&db_path);
+}
+
+#[tokio::test]
+async fn ws_broadcast_delivers_message() {
+    use futures_util::StreamExt;
+
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Connect a WS client
+    let url = format!("ws://{addr}/ws");
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+    // Broadcast a board update through the channel
+    let board_state = herald_common::BoardState::default();
+    let msg = herald_common::ServerMessage::BoardUpdate(board_state);
+    state.broadcast_tx().send(msg).unwrap();
+
+    // Client should receive the message
+    let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+        .await
+        .expect("timeout waiting for WS message")
+        .expect("stream ended")
+        .expect("WS error");
+
+    if let tokio_tungstenite::tungstenite::Message::Text(text) = received {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "board_update");
+    } else {
+        panic!("expected text message, got {:?}", received);
+    }
+
+    drop(ws_stream);
+    // Clean up the second db created by this test's state
+    cleanup(&db_path);
+}
