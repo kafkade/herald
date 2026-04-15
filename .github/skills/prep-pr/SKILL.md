@@ -1,9 +1,10 @@
 ---
-name: pr-ready
+name: prep-pr
 description: >
-  Prepare a pull request: generate a PR description using the repo's template,
-  update the Unreleased section of CHANGELOG.md with user-facing changes, and
-  copy the PR description to the clipboard. Invoke when the user asks to
+  Prepare a pull request description and update the changelog — but never
+  create the PR itself. Generates a PR description using the repo's template,
+  updates the Unreleased section of CHANGELOG.md with user-facing changes, and
+  copies the PR description to the clipboard. Invoke when the user asks to
   "generate a PR description", "describe this PR", "write PR notes",
   "prepare a PR", "pr ready", or "prep this PR".
 ---
@@ -113,3 +114,12 @@ Prepare a branch for pull request: generate a PR description from the diff AND u
     - Confirmation that the PR description is on the clipboard
     - A summary of what was added to CHANGELOG.md (list the new entries)
     - Note any changelog entries that were already present and preserved
+
+## Guardrails
+
+**This skill MUST NOT:**
+- Create a pull request (via GitHub MCP tools, `gh pr create`, or any other mechanism)
+- Run `git commit`, `git commit --amend`, `git push`, `git push --force`, or any command that modifies git history
+- Merge or close pull requests
+
+PR creation and all git write operations are the sole responsibility of the human developer. See the Git Policy in `copilot-instructions.md`.
