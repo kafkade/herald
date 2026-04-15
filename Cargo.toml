@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/herald-common", "crates/herald-server"]
+members = ["crates/herald-common", "crates/herald-server", "crates/herald-cli"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/kafkade/herald"
@@ -38,6 +38,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Error handling
 thiserror = "2"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+ratatui = "0.29"
+crossterm = "0.28"
 
 # Internal crates
 herald-common = { path = "crates/herald-common" }

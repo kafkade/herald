@@ -1,0 +1,21 @@
+[package]
+name = "herald-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI client for the Herald split-flap message board"
+
+[[bin]]
+name = "herald"
+path = "src/main.rs"
+
+[dependencies]
+herald-common = { workspace = true }
+clap = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+tokio-tungstenite = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+futures-util = { workspace = true }
