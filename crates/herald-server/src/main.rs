@@ -45,7 +45,5 @@ async fn main() {
 
     tracing::info!("Herald server listening on port {port}");
 
-    axum::serve(listener, app)
-        .await
-        .expect("server error");
+    axum::serve(listener, app).await.expect("server error");
 }

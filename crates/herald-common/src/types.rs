@@ -21,18 +21,13 @@ pub enum Color {
 }
 
 /// Content of a single board cell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub enum CellContent {
     Char(char),
     Color(Color),
+    #[default]
     Blank,
-}
-
-impl Default for CellContent {
-    fn default() -> Self {
-        Self::Blank
-    }
 }
 
 /// Horizontal text alignment.
@@ -112,19 +107,16 @@ pub struct Message {
 // ── Countdowns ────────────────────────────────────────────────────
 
 /// Behavior when a countdown reaches zero.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ZeroBehavior {
+    #[default]
     ShowZero,
-    ShowMessage { grid: Grid },
+    ShowMessage {
+        grid: Grid,
+    },
     Remove,
     Pause,
-}
-
-impl Default for ZeroBehavior {
-    fn default() -> Self {
-        Self::ShowZero
-    }
 }
 
 /// A countdown timer entry.

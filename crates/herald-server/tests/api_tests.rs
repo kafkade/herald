@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::http::{self, Request, StatusCode};
 use herald_server::{build_router, db, state::AppState};
 use http_body_util::BodyExt;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tower::ServiceExt;
 
 const TEST_TOKEN: &str = "test-secret-token";
@@ -572,7 +572,10 @@ async fn config_get_returns_defaults() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let config = json_body(response).await;
-    assert!(config["rotation_interval_seconds"].is_string() || config["rotation_interval_seconds"].is_number());
+    assert!(
+        config["rotation_interval_seconds"].is_string()
+            || config["rotation_interval_seconds"].is_number()
+    );
     assert!(config["default_h_align"].is_string());
 
     cleanup(&db_path);

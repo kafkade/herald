@@ -1,14 +1,12 @@
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 
 use super::ApiError;
 use crate::db;
 use crate::state::AppState;
 use herald_common::*;
 
-pub async fn list(
-    State(state): State<AppState>,
-) -> Result<Json<QueueListResponse>, ApiError> {
+pub async fn list(State(state): State<AppState>) -> Result<Json<QueueListResponse>, ApiError> {
     let items = db::get_queue(state.pool()).await?;
     let current_index = db::get_current_index(state.pool()).await?;
     let total = items.len();
@@ -28,8 +26,7 @@ pub async fn reorder(
     let current_items = db::get_queue(state.pool()).await?;
     let current_ids: std::collections::HashSet<uuid::Uuid> =
         current_items.iter().map(|i| i.id).collect();
-    let request_ids: std::collections::HashSet<uuid::Uuid> =
-        req.order.iter().copied().collect();
+    let request_ids: std::collections::HashSet<uuid::Uuid> = req.order.iter().copied().collect();
 
     if current_ids != request_ids {
         return Err(ApiError::BadRequest(

@@ -2,9 +2,9 @@ pub mod api;
 pub mod db;
 pub mod state;
 
+use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
-use axum::Router;
 
 use state::AppState;
 

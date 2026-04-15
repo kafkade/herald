@@ -5,9 +5,9 @@ pub mod health;
 pub mod messages;
 pub mod queue;
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use herald_common::ErrorResponse;
 
 /// Unified API error type.
