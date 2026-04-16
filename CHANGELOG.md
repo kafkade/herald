@@ -35,3 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default "HERALD" splash screen displayed when the queue is empty
 - Rotation metadata (`queue_info`) broadcast alongside every board update for viewer status bars
 - Rotation progress display in CLI status bar ("Item 2/5 · Next in 18s" or "Countdown active")
+- Text-based message creation via `POST /api/messages` with `{"text": "..."}` — auto-renders to 6×22 grid with word-wrapping, alignment, and character normalization
+- Dual-mode message API: accepts either `text` (auto-rendered) or `grid` (raw 6×22) for both create and update
+- Source text preservation on messages for round-trip editing and alignment reflow

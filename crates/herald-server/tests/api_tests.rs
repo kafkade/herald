@@ -42,24 +42,6 @@ async fn json_body(response: axum::response::Response) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
-/// Build a grid with text in the first row.
-fn text_grid(text: &str) -> Value {
-    let mut grid_data = Vec::new();
-    for r in 0..6 {
-        let mut row = Vec::new();
-        for c in 0..22 {
-            if r == 0 && c < text.len() {
-                let ch = text.chars().nth(c).unwrap();
-                row.push(json!({"type": "char", "value": ch.to_string()}));
-            } else {
-                row.push(json!({"type": "blank", "value": null}));
-            }
-        }
-        grid_data.push(row);
-    }
-    json!(grid_data)
-}
-
 // ── Health ────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -133,7 +115,7 @@ async fn create_message_returns_201() {
     let (app, db_path) = test_app().await;
 
     let body = json!({
-        "grid": text_grid("HELLO WORLD"),
+        "text": "HELLO WORLD",
         "h_align": "center",
         "v_align": "middle"
     });
@@ -172,6 +154,20 @@ async fn create_message_invalid_grid_returns_400() {
 
     let body = json!({ "grid": bad_grid });
 
+    let response = app
+        .clone()
+        .oneshot(
+            authed_request("POST", "/api/messages")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Neither text nor grid → 400
+    let body = json!({ "h_align": "center" });
     let response = app
         .oneshot(
             authed_request("POST", "/api/messages")
@@ -212,7 +208,7 @@ async fn message_crud_full_lifecycle() {
 
     // CREATE
     let create_body = json!({
-        "grid": text_grid("TEST MESSAGE"),
+        "text": "TEST MESSAGE",
         "h_align": "left"
     });
     let response = app
@@ -461,7 +457,7 @@ async fn queue_merged_and_reorder() {
 
     // Create a message
     let msg_body = json!({
-        "grid": text_grid("MSG ONE"),
+        "text": "MSG ONE",
     });
     let response = app
         .clone()
@@ -529,7 +525,7 @@ async fn queue_reorder_incomplete_ids_returns_400() {
     let (app, db_path) = test_app().await;
 
     // Create a message
-    let msg_body = json!({ "grid": text_grid("TEST") });
+    let msg_body = json!({ "text": "TEST" });
     app.clone()
         .oneshot(
             authed_request("POST", "/api/messages")
@@ -759,7 +755,7 @@ async fn ws_broadcast_on_message_create() {
         .post(format!("http://{addr}/api/messages"))
         .header("authorization", format!("Bearer {TEST_TOKEN}"))
         .json(&serde_json::json!({
-            "grid": text_grid("BROADCAST"),
+            "text": "BROADCAST",
             "h_align": "center",
             "v_align": "middle"
         }))
@@ -820,7 +816,7 @@ async fn ws_broadcast_on_message_delete() {
         .post(format!("http://{addr}/api/messages"))
         .header("authorization", format!("Bearer {TEST_TOKEN}"))
         .json(&serde_json::json!({
-            "grid": text_grid("DELETE ME"),
+            "text": "DELETE ME",
             "h_align": "center",
             "v_align": "middle"
         }))
@@ -1020,7 +1016,7 @@ async fn ws_initial_state_with_existing_message() {
         .post(format!("http://{addr}/api/messages"))
         .header("authorization", format!("Bearer {TEST_TOKEN}"))
         .json(&serde_json::json!({
-            "grid": text_grid("INITIAL"),
+            "text": "INITIAL",
             "h_align": "center",
             "v_align": "middle"
         }))
@@ -1103,7 +1099,7 @@ async fn rotation_advance_cycles_through_queue() {
             .post(format!("http://{addr}/api/messages"))
             .header("authorization", format!("Bearer {TEST_TOKEN}"))
             .json(&serde_json::json!({
-                "grid": text_grid(label),
+                "text": label,
                 "h_align": "center",
                 "v_align": "middle"
             }))
@@ -1186,7 +1182,7 @@ async fn rotation_skips_and_deletes_expired_messages() {
         .post(format!("http://{addr}/api/messages"))
         .header("authorization", format!("Bearer {TEST_TOKEN}"))
         .json(&serde_json::json!({
-            "grid": text_grid("KEEP"),
+            "text": "KEEP",
             "h_align": "center",
             "v_align": "middle"
         }))
@@ -1204,7 +1200,7 @@ async fn rotation_skips_and_deletes_expired_messages() {
         .post(format!("http://{addr}/api/messages"))
         .header("authorization", format!("Bearer {TEST_TOKEN}"))
         .json(&serde_json::json!({
-            "grid": text_grid("EXPIRED"),
+            "text": "EXPIRED",
             "h_align": "center",
             "v_align": "middle",
             "expires_at": "2020-01-01T00:00:00Z"
@@ -1271,7 +1267,7 @@ async fn rotation_all_expired_results_in_empty_board() {
             .post(format!("http://{addr}/api/messages"))
             .header("authorization", format!("Bearer {TEST_TOKEN}"))
             .json(&serde_json::json!({
-                "grid": text_grid(label),
+                "text": label,
                 "h_align": "center",
                 "v_align": "middle",
                 "expires_at": "2020-01-01T00:00:00Z"
