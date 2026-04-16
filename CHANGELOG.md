@@ -18,3 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 17 integration tests covering all API endpoints and error cases
 - CLI binary (`herald`) with subcommands: serve, watch, push, countdown, queue, config
 - Real-time board update broadcasts to WebSocket viewers on every content mutation
+- Immediate board state delivery to WebSocket clients on connect (no waiting for next update)
+- CLI WebSocket client with automatic reconnection and exponential backoff (1s–30s)
+- `--server` option on `herald watch` to specify the WebSocket server URL
+- Terminal board viewer (`herald watch`) with live-updating 6×22 grid, color tile rendering, and centered viewport

@@ -1,4 +1,5 @@
 mod commands;
+mod ui;
 mod ws_client;
 
 use clap::{Parser, Subcommand};
