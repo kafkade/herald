@@ -48,7 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--animation-speed` flag on `herald watch`: `fast`, `normal` (default), `slow`, or `off` to control flip animation timing
 - `list-queue.ps1` script to display all messages and countdowns currently in the rotation queue
 - All PowerShell scripts auto-detect `$env:HERALD_ADMIN_TOKEN`, removing the need to pass `-Token` every time
+- `add-color-message.ps1` script to push messages with colored tile fills (`-Color`, `-FillRows`, `-BgColor`)
+- `remove-countdown.ps1` script to remove countdowns by ID or all at once
 
 ### Changed
 
 - Optimized animation rendering: pre-allocated display buffers and frame-skip logic for smooth 30fps playback
+
+### Fixed
+
+- `herald watch` now correctly exits on `q`, `Esc`, or `Ctrl+C` (previously these keypresses were silently ignored)

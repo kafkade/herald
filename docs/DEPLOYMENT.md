@@ -1,5 +1,7 @@
 # Herald — Deployment Guide
 
+> **Note:** This document describes the *planned* deployment setup for production use. Docker, systemd units, and reverse proxy configurations are not yet implemented (see [ROADMAP.md](./ROADMAP.md) Phase 7). For current usage, see the [README](../README.md) Quick Start section.
+
 This guide covers everything you need to deploy Herald, from Docker containers to bare-metal installs. By the end, you should have a running Herald instance accessible via web browser or CLI viewer.
 
 For architecture details, see [ARCHITECTURE.md](./ARCHITECTURE.md). For the full system spec, see [SPEC.md](./SPEC.md). For design decisions behind these choices, see [DECISIONS.md](./DECISIONS.md).

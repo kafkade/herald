@@ -28,8 +28,7 @@ Bump the version in all `Cargo.toml` files:
 # Root workspace
 # crates/herald-common/Cargo.toml
 # crates/herald-server/Cargo.toml
-# (future) crates/herald-cli/Cargo.toml
-# (future) crates/herald-web/Cargo.toml
+# crates/herald-cli/Cargo.toml
 ```
 
 ### 2. Update CHANGELOG.md

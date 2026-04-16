@@ -132,7 +132,13 @@ async fn run_tui(
         );
     })?;
 
+    let mut should_quit = false;
+
     loop {
+        if should_quit {
+            break;
+        }
+
         // Use a shorter tick when animating for smooth rendering
         let tick_duration = if animation.is_some() {
             ANIMATION_TICK.min(normal_tick)
@@ -229,11 +235,15 @@ async fn run_tui(
                     match event::read()? {
                         Event::Key(key) if key.kind == KeyEventKind::Press => {
                             match key.code {
-                                KeyCode::Char('q') | KeyCode::Esc => break,
+                                KeyCode::Char('q') | KeyCode::Esc => {
+                                    should_quit = true;
+                                    break;
+                                }
                                 KeyCode::Char('c')
                                     if key.modifiers.contains(KeyModifiers::CONTROL) =>
                                 {
-                                    break
+                                    should_quit = true;
+                                    break;
                                 }
                                 _ => {}
                             }

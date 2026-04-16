@@ -2,6 +2,8 @@
 
 > Architectural foundation for the Herald split-flap message board system.
 > This document describes the system's components, how they communicate, and how the codebase is organized.
+>
+> **Implementation status:** Phases 1–4 are complete (server, CLI viewer with animation). The web viewer (`herald-web`), admin CLI subcommands, Docker packaging, and deployment tooling described below are part of the planned architecture but are not yet implemented. See [ROADMAP.md](./ROADMAP.md) for details.
 
 ---
 
