@@ -17,3 +17,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Health check endpoint (unauthenticated) returning status, version, and uptime
 - 17 integration tests covering all API endpoints and error cases
 - CLI binary (`herald`) with subcommands: serve, watch, push, countdown, queue, config
+- Real-time board update broadcasts to WebSocket viewers on every content mutation

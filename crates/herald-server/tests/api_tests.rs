@@ -723,3 +723,194 @@ async fn ws_broadcast_delivers_message() {
     // Clean up the second db created by this test's state
     cleanup(&db_path);
 }
+
+// ── WS broadcast integration tests ──────────────────────────────
+
+#[tokio::test]
+async fn ws_broadcast_on_message_create() {
+    use futures_util::StreamExt;
+
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Connect a WS client
+    let ws_url = format!("ws://{addr}/ws");
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
+
+    // Create a message via HTTP
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{addr}/api/messages"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .json(&serde_json::json!({
+            "grid": text_grid("BROADCAST"),
+            "h_align": "center",
+            "v_align": "middle"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+
+    // WS client should receive a board_update
+    let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+        .await
+        .expect("timeout waiting for broadcast")
+        .expect("stream ended")
+        .expect("WS error");
+
+    if let tokio_tungstenite::tungstenite::Message::Text(text) = received {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "board_update");
+        assert!(parsed["grid"].is_array());
+        assert!(parsed["current_item"].is_object());
+    } else {
+        panic!("expected text message, got {:?}", received);
+    }
+
+    drop(ws_stream);
+    cleanup(&db_path);
+}
+
+#[tokio::test]
+async fn ws_broadcast_on_message_delete() {
+    use futures_util::StreamExt;
+
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let ws_url = format!("ws://{addr}/ws");
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
+
+    // Create a message
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{addr}/api/messages"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .json(&serde_json::json!({
+            "grid": text_grid("DELETE ME"),
+            "h_align": "center",
+            "v_align": "middle"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+    let msg: serde_json::Value = resp.json().await.unwrap();
+    let msg_id = msg["id"].as_str().unwrap().to_string();
+
+    // Drain the create broadcast
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next()).await;
+
+    // Delete the message
+    let resp = client
+        .delete(format!("http://{addr}/api/messages/{msg_id}"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::NO_CONTENT);
+
+    // WS client should receive a board_update with empty board
+    let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+        .await
+        .expect("timeout waiting for delete broadcast")
+        .expect("stream ended")
+        .expect("WS error");
+
+    if let tokio_tungstenite::tungstenite::Message::Text(text) = received {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "board_update");
+        // Queue is now empty, so current_item should be null
+        assert!(parsed["current_item"].is_null());
+    } else {
+        panic!("expected text message, got {:?}", received);
+    }
+
+    drop(ws_stream);
+    cleanup(&db_path);
+}
+
+#[tokio::test]
+async fn ws_broadcast_on_countdown_create() {
+    use futures_util::StreamExt;
+
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let ws_url = format!("ws://{addr}/ws");
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
+
+    // Create a countdown via HTTP
+    let client = reqwest::Client::new();
+    let future_time = chrono::Utc::now() + chrono::Duration::hours(1);
+    let resp = client
+        .post(format!("http://{addr}/api/countdowns"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .json(&serde_json::json!({
+            "label": "Launch",
+            "target": future_time.to_rfc3339()
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+
+    // WS client should receive a board_update
+    let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+        .await
+        .expect("timeout waiting for broadcast")
+        .expect("stream ended")
+        .expect("WS error");
+
+    if let tokio_tungstenite::tungstenite::Message::Text(text) = received {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "board_update");
+        assert_eq!(parsed["current_item"]["kind"], "countdown");
+        assert_eq!(parsed["current_item"]["label"], "Launch");
+    } else {
+        panic!("expected text message, got {:?}", received);
+    }
+
+    drop(ws_stream);
+    cleanup(&db_path);
+}

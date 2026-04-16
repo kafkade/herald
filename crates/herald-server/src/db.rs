@@ -475,3 +475,41 @@ pub async fn queue_size(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
     let total: i64 = row.get("total");
     Ok(total as usize)
 }
+
+/// Build the current board state from the queue and rotation state.
+pub async fn build_board_state(pool: &SqlitePool) -> Result<BoardState, sqlx::Error> {
+    let queue = get_queue(pool).await?;
+    let current_idx = get_current_index(pool).await?;
+
+    if queue.is_empty() {
+        return Ok(BoardState::default());
+    }
+
+    let idx = (current_idx as usize) % queue.len();
+    let current_item = &queue[idx];
+
+    let grid = match current_item.kind {
+        QueueItemKind::Message => match get_message(pool, &current_item.id.to_string()).await? {
+            Some(msg) => msg.grid,
+            None => Grid::blank(),
+        },
+        QueueItemKind::Countdown => {
+            // Countdown grid rendering is not yet implemented;
+            // broadcast a blank grid so viewers still get the metadata.
+            Grid::blank()
+        }
+    };
+
+    let item_info = QueueItemInfo {
+        id: current_item.id,
+        kind: current_item.kind,
+        label: current_item.label.clone(),
+    };
+
+    Ok(BoardState {
+        grid,
+        previous_grid: Grid::blank(),
+        current_item: Some(item_info),
+        timestamp: chrono::Utc::now(),
+    })
+}
