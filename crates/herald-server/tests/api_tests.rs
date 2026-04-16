@@ -750,6 +750,9 @@ async fn ws_broadcast_on_message_create() {
     let ws_url = format!("ws://{addr}/ws");
     let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
+    // Drain the initial board state message sent on connect
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next()).await;
+
     // Create a message via HTTP
     let client = reqwest::Client::new();
     let resp = client
@@ -765,7 +768,7 @@ async fn ws_broadcast_on_message_create() {
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
 
-    // WS client should receive a board_update
+    // WS client should receive a board_update broadcast
     let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
         .await
         .expect("timeout waiting for broadcast")
@@ -807,6 +810,9 @@ async fn ws_broadcast_on_message_delete() {
 
     let ws_url = format!("ws://{addr}/ws");
     let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
+
+    // Drain the initial board state message sent on connect
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next()).await;
 
     // Create a message
     let client = reqwest::Client::new();
@@ -880,6 +886,9 @@ async fn ws_broadcast_on_countdown_create() {
     let ws_url = format!("ws://{addr}/ws");
     let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
 
+    // Drain the initial board state message sent on connect
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next()).await;
+
     // Create a countdown via HTTP
     let client = reqwest::Client::new();
     let future_time = chrono::Utc::now() + chrono::Duration::hours(1);
@@ -907,6 +916,144 @@ async fn ws_broadcast_on_countdown_create() {
         assert_eq!(parsed["type"], "board_update");
         assert_eq!(parsed["current_item"]["kind"], "countdown");
         assert_eq!(parsed["current_item"]["label"], "Launch");
+    } else {
+        panic!("expected text message, got {:?}", received);
+    }
+
+    drop(ws_stream);
+    cleanup(&db_path);
+}
+
+// ── WS initial board state tests ────────────────────────────────
+
+#[tokio::test]
+async fn ws_initial_state_empty_board() {
+    use futures_util::StreamExt;
+
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Connect WS client to a fresh (empty) database
+    let ws_url = format!("ws://{addr}/ws");
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
+
+    // First message should be the initial board state
+    let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+        .await
+        .expect("timeout waiting for initial board state")
+        .expect("stream ended")
+        .expect("WS error");
+
+    if let tokio_tungstenite::tungstenite::Message::Text(text) = received {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+
+        // Verify message format has all expected fields
+        assert_eq!(parsed["type"], "board_update");
+        assert!(parsed["grid"].is_array(), "missing 'grid' field");
+        assert!(parsed.get("previous_grid").is_some(), "missing 'previous_grid' field");
+        assert!(parsed.get("timestamp").is_some(), "missing 'timestamp' field");
+
+        // Empty board: no queue items (field omitted by skip_serializing_if or null)
+        assert!(
+            parsed.get("current_item").is_none() || parsed["current_item"].is_null(),
+            "expected current_item to be absent or null on empty board"
+        );
+
+        // Grid should be 6 rows × 22 columns of blank cells
+        let grid = parsed["grid"].as_array().unwrap();
+        assert_eq!(grid.len(), 6, "grid should have 6 rows");
+        for row in grid {
+            let cols = row.as_array().unwrap();
+            assert_eq!(cols.len(), 22, "each row should have 22 columns");
+        }
+    } else {
+        panic!("expected text message, got {:?}", received);
+    }
+
+    drop(ws_stream);
+    cleanup(&db_path);
+}
+
+#[tokio::test]
+async fn ws_initial_state_with_existing_message() {
+    use futures_util::StreamExt;
+
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Create a message via HTTP BEFORE connecting the WS client
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{addr}/api/messages"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .json(&serde_json::json!({
+            "grid": text_grid("INITIAL"),
+            "h_align": "center",
+            "v_align": "middle"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+
+    // Now connect WS client — it should receive the current board state
+    let ws_url = format!("ws://{addr}/ws");
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(&ws_url).await.unwrap();
+
+    // First message should be board_update with the existing message
+    let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+        .await
+        .expect("timeout waiting for initial board state")
+        .expect("stream ended")
+        .expect("WS error");
+
+    if let tokio_tungstenite::tungstenite::Message::Text(text) = received {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+
+        assert_eq!(parsed["type"], "board_update");
+        assert!(parsed["grid"].is_array());
+
+        // current_item should be populated with the message we created
+        assert!(parsed["current_item"].is_object(), "expected current_item to be populated");
+        assert_eq!(parsed["current_item"]["kind"], "message");
+
+        // Grid should contain non-blank content (the message we posted)
+        let grid = parsed["grid"].as_array().unwrap();
+        let has_non_blank = grid.iter().any(|row| {
+            row.as_array().unwrap().iter().any(|cell| {
+                // A non-blank cell is anything other than a default blank
+                cell != &serde_json::json!({"Blank": null})
+                    && cell != &serde_json::json!("Blank")
+                    && cell != &serde_json::json!(null)
+            })
+        });
+        assert!(has_non_blank, "grid should contain the message content, not be entirely blank");
     } else {
         panic!("expected text message, got {:?}", received);
     }

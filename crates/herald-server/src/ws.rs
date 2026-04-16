@@ -18,6 +18,25 @@ async fn handle_connection(mut socket: WebSocket, state: AppState) {
 
     let mut broadcast_rx = state.subscribe_broadcast();
 
+    // Send the current board state as the first message so the client
+    // renders immediately without waiting for the next broadcast.
+    match crate::db::build_board_state(state.pool()).await {
+        Ok(board_state) => {
+            let msg = herald_common::ServerMessage::BoardUpdate(board_state);
+            match serde_json::to_string(&msg) {
+                Ok(text) => {
+                    if socket.send(Message::Text(text.into())).await.is_err() {
+                        let viewer_count = state.remove_viewer();
+                        tracing::info!("WebSocket client disconnected during initial state send (viewers: {viewer_count})");
+                        return;
+                    }
+                }
+                Err(e) => tracing::error!("Failed to serialize initial board state: {e}"),
+            }
+        }
+        Err(e) => tracing::warn!("Failed to build initial board state: {e}"),
+    }
+
     loop {
         tokio::select! {
             // Forward broadcast messages to this client
