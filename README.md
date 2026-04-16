@@ -12,222 +12,284 @@ Herald is an open-source, split-flap / Vestaboard-style digital message board an
 
 - **6×22 character grid** — Vestaboard-compatible format
 - **Full character set** — A–Z, 0–9, special characters, plus colored tiles (red, orange, yellow, green, blue, violet, white, black)
-- **Message queue** with configurable rotation (default 30 s)
-- **Countdown timers** mixed into the rotation
+- **Text-based message API** — just send `{"text": "HELLO WORLD"}` with automatic word-wrapping, alignment, and character normalization
+- **Raw grid API** — full control over individual cells for color tiles and custom layouts
+- **Message queue** with configurable rotation (default 10 s)
+- **Countdown timers** mixed into the rotation with real-time ticking
 - **Real-time WebSocket push** to all connected viewers
-- **Terminal viewer** — split-flap flip animations right in your terminal
-- **Browser viewer** — 3D split-flap animations via CSS + WebAssembly
-- **Single-binary server** — serves the web frontend as static assets
+- **Terminal viewer** — split-flap flip animations with left-to-right cascade stagger
+- **ANSI 256-color support** — vibrant color tiles with automatic fallback for basic terminals
+- **Animation speed control** — `fast`, `normal`, `slow`, or `off`
 - **Simple auth** — single admin with bearer-token authentication
-- **Self-hosted** — Docker or bare metal, SQLite for persistence
-- **All Rust** — monorepo, one toolchain, no JavaScript runtime
+- **SQLite persistence** — data survives restarts
+- **PowerShell helper scripts** — quick admin without remembering curl syntax
+- **All Rust** — monorepo, one toolchain
 
----
+### Roadmap (not yet implemented)
 
-## 📸 Screenshots
-
-### Terminal (herald-cli)
-
-<!-- TODO: Add terminal screenshot -->
-
-```
-┌──────────────────────────────────────────────┐
-│  H E L L O   W O R L D · · · · · · · · · ·   │
-│  · · · · · · · · · · · · · · · · · · · · · · │
-│  · · · · · · · · · · · · · · · · · · · · · · │
-│  · · · · · · · · · · · · · · · · · · · · · · │
-│  · · · · · · · · · · · · · · · · · · · · · · │
-│  · · · · · · · · · · · · · · · · · · · · · · │
-└──────────────────────────────────────────────┘
-```
-
-### Browser (herald-web)
-
-<!-- TODO: Add browser screenshot -->
+- Browser viewer (Leptos + WebAssembly with 3D CSS flip animations)
+- Admin web panel and CLI admin subcommands
+- Docker packaging and deployment tooling
+- Sound effects, themes, scheduling, rate limiting
 
 ---
 
 ## 🚀 Quick Start
 
-### Docker
+### Prerequisites
+
+- Rust toolchain (see `rust-toolchain.toml` for the exact version)
+- A terminal that supports ANSI colors (most modern terminals do)
+
+### 1. Build
 
 ```bash
-docker run -p 3000:3000 herald
-```
-
-Open <http://localhost:3000> to see the web viewer.
-
-### From Source
-
-```bash
-git clone https://github.com/your-org/herald.git
+git clone https://github.com/kafkade/herald.git
 cd herald
 cargo build --release
-
-# Start the server
-./target/release/herald serve
 ```
 
-### First Steps
+### 2. Start the server
+
+```powershell
+cargo run -p herald-server
+```
+
+The server prints an admin token on first startup — **copy it**. You can also set it via environment variable:
+
+```powershell
+$env:HERALD_ADMIN_TOKEN = "my-secret-token"
+cargo run -p herald-server
+```
+
+The server listens on port 3000 by default. Configure with `$env:HERALD_PORT`.
+
+### 3. Connect the terminal viewer
+
+In a second terminal:
+
+```powershell
+cargo run -p herald-cli -- watch
+```
+
+You'll see the HERALD splash screen. Options:
+
+```powershell
+# Custom server URL
+cargo run -p herald-cli -- watch --server ws://myhost:3000/ws
+
+# Adjust frame rate
+cargo run -p herald-cli -- watch --fps 60
+
+# Control animation speed: fast, normal, slow, or off
+cargo run -p herald-cli -- watch --animation-speed fast
+cargo run -p herald-cli -- watch --animation-speed off    # instant transitions
+```
+
+Press `q` or `Esc` to exit the viewer.
+
+### 4. Push messages
+
+Set your token once, then use the helper scripts:
+
+```powershell
+$env:HERALD_ADMIN_TOKEN = "your-token-here"
+
+# Simple text message
+.\scripts\add-message.ps1 -Text "HELLO WORLD"
+
+# Left-aligned message
+.\scripts\add-message.ps1 -Text "DEPARTURE 08:45" -HAlign left
+
+# Message that expires after 5 minutes
+.\scripts\add-message.ps1 -Text "FLASH SALE" -ExpiresIn 300
+
+# Colored message with green background fill
+.\scripts\add-color-message.ps1 -Text "GO TEAM" -Color green -FillRows all
+
+# Colored text with decorative rows
+.\scripts\add-color-message.ps1 -Text "ALERT" -Color red -FillRows top
+
+# Create a countdown
+.\scripts\add-countdown.ps1 -Label "LAUNCH" -Target "2026-12-31T00:00:00Z"
+.\scripts\add-countdown.ps1 -Label "STANDUP" -InMinutes 15
+
+# List everything in the queue
+.\scripts\list-queue.ps1
+
+# Remove a message by ID
+.\scripts\remove-message.ps1 -Id "some-uuid"
+
+# Remove all messages
+.\scripts\remove-message.ps1 -All
+
+# Change rotation speed
+.\scripts\set-rotation-interval.ps1 -Seconds 15
+```
+
+### Using curl instead
 
 ```bash
-# Set an admin token (or configure via TOML / env var)
-export HERALD_ADMIN_TOKEN="my-secret-token"
+TOKEN="your-token"
 
-# Start the server
-herald serve
+# Push a text message
+curl -X POST http://localhost:3000/api/messages \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "HELLO WORLD"}'
 
-# Push your first message
-herald push "HELLO WORLD"
+# Create a countdown
+curl -X POST http://localhost:3000/api/countdowns \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"label": "LAUNCH", "target": "2026-12-31T00:00:00Z"}'
 
-# Open the TUI viewer in another terminal
-herald watch
+# List the queue
+curl http://localhost:3000/api/queue \
+  -H "Authorization: Bearer $TOKEN"
 
-# Or open http://localhost:3000 in your browser
+# Check server health (no auth needed)
+curl http://localhost:3000/api/health
 ```
+
+---
+
+## 📜 PowerShell Scripts
+
+All scripts live in `scripts/` and auto-detect `$env:HERALD_ADMIN_TOKEN`. Pass `-Token` to override.
+
+| Script | Description |
+|---|---|
+| `add-message.ps1` | Push a text message (`-Text`, `-HAlign`, `-VAlign`, `-ExpiresIn`) |
+| `add-color-message.ps1` | Push a message with colored tile fills (`-Color`, `-FillRows`, `-BgColor`) |
+| `add-countdown.ps1` | Create a countdown (`-Label`, `-Target` or `-InMinutes` / `-InHours`) |
+| `remove-message.ps1` | Remove by `-Id`, `-All`, or list messages (no args) |
+| `list-queue.ps1` | Show all messages and countdowns in the rotation |
+| `set-rotation-interval.ps1` | Set rotation speed in `-Seconds` |
 
 ---
 
 ## 🏗 Architecture
 
-Herald is structured as a Cargo workspace with three main crates and a shared library:
+Herald is structured as a Cargo workspace:
 
 ```
-                 ┌───────────────────────┐
-                 │    herald-server      │
-                 │    (Axum + SQLite)    │
-                 └───┬─────────────┬─────┘
-          REST API   │             │  WebSocket
-         (admin ops) │             │  (real-time push)
-                     │             │
-             ┌───────┘             └───────┐
-             │                             │
-  ┌──────────▼───────────┐   ┌────────────▼────────────┐
-  │     herald-cli       │   │      herald-web         │
-  │  (ratatui terminal)  │   │    (Leptos → Wasm)      │
-  └──────────┬───────────┘   └────────────┬────────────┘
-             │                             │
-             └──────────┬──────────────────┘
-                        │
-              ┌─────────▼──────────┐
-              │   herald-common    │
-              │   (shared types)   │
-              └────────────────────┘
+crates/
+  herald-common/    — Shared types (Grid, CellContent, Message, Countdown, etc.)
+  herald-server/    — Axum REST API + WebSocket + SQLite persistence
+  herald-cli/       — Terminal viewer (ratatui TUI) with split-flap animation
 ```
 
-- **herald-server** — Axum-based backend. REST API for admin operations, WebSocket for viewer push. Serves the web frontend as static assets. SQLite (via sqlx) for persistence.
-- **herald-cli** — Terminal TUI viewer built with ratatui + crossterm. Connects via WebSocket and renders split-flap board with flip animations and color support.
-- **herald-web** — Browser viewer built with Leptos, compiled to WebAssembly. Connects via WebSocket and renders 3D split-flap animations with CSS.
-- **herald-common** — Shared types, message formats, and protocol definitions used by all other crates.
+```
+             ┌───────────────────────┐
+             │    herald-server      │
+             │    (Axum + SQLite)    │
+             └───┬─────────────┬─────┘
+      REST API   │             │  WebSocket
+     (admin ops) │             │  (real-time push)
+                 │             │
+         ┌───────┘             └───────┐
+         │                             │
+┌────────▼─────────┐        ┌─────────▼─────────┐
+│   herald-cli     │        │   herald-web      │
+│  (ratatui TUI)   │        │   (future)        │
+└────────┬─────────┘        └───────────────────┘
+         │
+┌────────▼─────────┐
+│  herald-common   │
+│  (shared types)  │
+└──────────────────┘
+```
 
-For a deeper dive, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Data flow:** HTTP request → Axum handler → SQLite → JSON response. Board state broadcast via WebSocket to all connected viewers on every mutation.
+
+For details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
-## 💻 CLI Reference
+## 🔧 REST API
 
-| Command | Description |
-|---|---|
-| `herald serve` | Start the Herald server |
-| `herald watch` | Open the terminal split-flap viewer (TUI) |
-| `herald push "<MESSAGE>"` | Push a message to the board |
-| `herald countdown create` | Create a countdown timer (`--label`, `--target`) |
-| `herald queue list` | List messages in the rotation queue |
-| `herald queue remove <ID>` | Remove a message from the queue |
-| `herald config set <KEY> <VALUE>` | Update a configuration value |
-| `herald config get <KEY>` | Read a configuration value |
+All write endpoints require `Authorization: Bearer <token>`.
 
-**Examples:**
+### Messages
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/messages` | Create a message (`text` or `grid`) |
+| `GET` | `/api/messages` | List all messages |
+| `GET` | `/api/messages/:id` | Get a message |
+| `PUT` | `/api/messages/:id` | Update a message |
+| `DELETE` | `/api/messages/:id` | Delete a message |
+
+**Create with text** (auto-wrapped to 6×22):
+```json
+{"text": "HELLO WORLD", "h_align": "center", "v_align": "middle"}
+```
+
+**Create with raw grid** (for color tiles):
+```json
+{"grid": [[{"type":"char","value":"H"}, {"type":"color","value":"red"}, {"type":"blank"}, ...]]}
+```
+
+### Countdowns
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/countdowns` | Create a countdown |
+| `GET` | `/api/countdowns` | List all countdowns |
+| `GET` | `/api/countdowns/:id` | Get a countdown |
+| `DELETE` | `/api/countdowns/:id` | Delete a countdown |
+
+```json
+{"label": "LAUNCH", "target": "2026-12-31T00:00:00Z", "zero_behavior": {"action": "show_zero"}}
+```
+
+Zero behaviors: `show_zero`, `remove`, `pause`, `show_message`.
+
+### Queue & Config
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/queue` | List queue items in display order |
+| `PUT` | `/api/queue/reorder` | Reorder queue items |
+| `GET` | `/api/config` | Get all config values |
+| `PUT` | `/api/config` | Update config values |
+| `GET` | `/api/health` | Health check (no auth) |
+
+---
+
+## ⚙️ Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `HERALD_ADMIN_TOKEN` | *(auto-generated)* | Bearer token for admin API |
+| `HERALD_DB_PATH` | `herald.db` | SQLite database file path |
+| `HERALD_PORT` | `3000` | Server listen port |
+| `HERALD_LOG_LEVEL` | `info` | Log level (trace, debug, info, warn, error) |
+
+---
+
+## 🧪 Development
 
 ```bash
-# Push a message
-herald push "TRAIN TO PARIS"
-
-# Create a countdown
-herald countdown create --label "LAUNCH" --target "2025-12-31T00:00:00Z"
-
-# Change rotation interval to 45 seconds
-herald config set rotation_interval 45
+cargo build                       # Debug build
+cargo test                        # Run all tests (~90 tests)
+cargo clippy                      # Lint
+cargo fmt                         # Format
+cargo run -p herald-server        # Start the server
+cargo run -p herald-cli -- watch  # Start the terminal viewer
 ```
-
-For full CLI documentation, see [docs/CLI.md](docs/CLI.md).
-
----
-
-## ⚙️ Configuration
-
-Herald is configured via a TOML file, with environment variable overrides.
-
-| Option | Default | Env Override | Description |
-|---|---|---|---|
-| `server.port` | `3000` | `HERALD_PORT` | HTTP / WebSocket listen port |
-| `server.host` | `0.0.0.0` | `HERALD_HOST` | Bind address |
-| `admin.token` | *(required)* | `HERALD_ADMIN_TOKEN` | Bearer token for admin API |
-| `board.rotation_interval` | `30` | `HERALD_ROTATION_INTERVAL` | Seconds between message rotations |
-| `board.rows` | `6` | — | Board row count |
-| `board.cols` | `22` | — | Board column count |
-| `database.path` | `herald.db` | `HERALD_DB_PATH` | SQLite database file path |
-
-See [docs/SPEC.md](docs/SPEC.md) for the full configuration reference.
-
----
-
-## 🐳 Deployment
-
-### Docker
-
-```bash
-docker run -d \
-  --name herald \
-  -p 3000:3000 \
-  -e HERALD_ADMIN_TOKEN="my-secret-token" \
-  -v herald-data:/data \
-  herald
-```
-
-### Bare Metal
-
-```bash
-cargo build --release
-cp target/release/herald /usr/local/bin/
-
-# Create a config file
-cat > /etc/herald/config.toml <<EOF
-[server]
-port = 3000
-
-[admin]
-token = "my-secret-token"
-
-[database]
-path = "/var/lib/herald/herald.db"
-EOF
-
-herald serve --config /etc/herald/config.toml
-```
-
-For systemd units, reverse proxy setup, and production hardening, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
----
-
-## 🤝 Contributing
-
-We welcome contributions of all kinds — bug reports, feature requests, documentation improvements, and code. Whether you're fixing a typo or building a new feature, we'd love your help.
-
-See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) to get started.
 
 ---
 
 ## 📄 License
 
-Herald is licensed under the [MIT License](LICENSE).
-
-> **Note:** If you have a preference for Apache-2.0 or dual licensing (MIT OR Apache-2.0, common in the Rust ecosystem), open an issue and we can discuss.
+Herald is licensed under the [MIT License](LICENSE-MIT).
 
 ---
 
 ## 🙏 Acknowledgments
 
 - [Vestaboard](https://www.vestaboard.com/) — visual inspiration for the 6×22 character grid and colored tile system.
-- [Solari di Udine](https://en.wikipedia.org/wiki/Solari_di_Udine) — creators of the original split-flap (Solari board) display mechanism that has graced train stations and airports worldwide since the 1950s.
-- The Rust community and the maintainers of [Axum](https://github.com/tokio-rs/axum), [ratatui](https://github.com/ratatui/ratatui), [Leptos](https://github.com/leptos-rs/leptos), and [sqlx](https://github.com/launchbadge/sqlx) — Herald stands on your shoulders.
+- [Solari di Udine](https://en.wikipedia.org/wiki/Solari_di_Udine) — creators of the original split-flap display mechanism.
+- The Rust community and the maintainers of [Axum](https://github.com/tokio-rs/axum), [ratatui](https://github.com/ratatui/ratatui), [Leptos](https://github.com/leptos-rs/leptos), and [sqlx](https://github.com/launchbadge/sqlx).

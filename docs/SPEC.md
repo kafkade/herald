@@ -1,6 +1,8 @@
 # Herald — Technical Specification
 
 > The deep technical reference for Herald: board specifications, data models, APIs, rendering, configuration, and error handling.
+>
+> **Note:** This spec describes the complete planned system. The message creation API now also accepts a `text` field (auto-rendered to grid) in addition to the raw `grid` field documented below. See the [README](../README.md) for current API usage. Features marked as Phase 5+ (web viewer, admin CLI, Docker) are not yet implemented.
 
 ---
 

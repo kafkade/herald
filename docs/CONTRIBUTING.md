@@ -14,9 +14,7 @@ If you haven't already, check out the [README](../README.md) for an overview of 
 
 | Tool | Minimum Version | Notes |
 |---|---|---|
-| **Rust** | 1.75+ | Install via [rustup](https://rustup.rs/) |
-| **wasm32-unknown-unknown target** | — | `rustup target add wasm32-unknown-unknown` |
-| **Trunk** | 0.17+ | `cargo install trunk` (for Wasm/Leptos builds) |
+| **Rust** | 1.75+ | Install via [rustup](https://rustup.rs/). See `rust-toolchain.toml` for the exact version. |
 | **SQLite dev libraries** | 3.35+ | `libsqlite3-dev` (Debian/Ubuntu) or `sqlite-devel` (Fedora) |
 
 > **Tip:** On macOS, SQLite ships with the system. On Windows, sqlx can use a bundled version — no extra install needed.
@@ -24,14 +22,11 @@ If you haven't already, check out the [README](../README.md) for an overview of 
 ### Clone and Build
 
 ```bash
-git clone https://github.com/your-org/herald.git
+git clone https://github.com/kafkade/herald.git
 cd herald
 
 # Build all crates
 cargo build
-
-# Build the Wasm frontend separately
-cargo build -p herald-web --target wasm32-unknown-unknown
 ```
 
 ### Run in Development Mode
@@ -39,27 +34,38 @@ cargo build -p herald-web --target wasm32-unknown-unknown
 **Start the server:**
 
 ```bash
+# On Linux/macOS
 export HERALD_ADMIN_TOKEN="dev-token"
-cargo run -p herald-server -- serve
+cargo run -p herald-server
+
+# On Windows (PowerShell)
+$env:HERALD_ADMIN_TOKEN = "dev-token"
+cargo run -p herald-server
 ```
 
-The server starts on <http://localhost:3000> by default.
+The server starts on <http://localhost:3000> by default and prints the admin token to stdout.
 
 **Run the CLI viewer:**
 
 ```bash
 # In a separate terminal
 cargo run -p herald-cli -- watch
+
+# With animation speed control
+cargo run -p herald-cli -- watch --animation-speed fast
+
+# Disable animation
+cargo run -p herald-cli -- watch --animation-speed off
 ```
 
-**Build and serve the web frontend with Trunk:**
+**Push a message (PowerShell):**
 
-```bash
-cd herald-web
-trunk serve --open
+```powershell
+$env:HERALD_ADMIN_TOKEN = "dev-token"
+.\scripts\add-message.ps1 -Text "HELLO WORLD"
+.\scripts\add-color-message.ps1 -Text "GO TEAM" -Color green -FillRows all
+.\scripts\list-queue.ps1
 ```
-
-Trunk will compile the Leptos app to Wasm, serve it with hot-reload, and open your browser.
 
 ---
 
@@ -70,35 +76,27 @@ Herald is organized as a Cargo workspace:
 ```
 herald/
 ├── Cargo.toml              # Workspace root
-├── herald-common/          # Shared types, message formats, protocol definitions
-│   ├── Cargo.toml
-│   └── src/
-├── herald-server/          # Axum backend — REST API, WebSocket, static file serving
-│   ├── Cargo.toml
-│   └── src/
-├── herald-cli/             # ratatui terminal viewer — split-flap TUI
-│   ├── Cargo.toml
-│   └── src/
-├── herald-web/             # Leptos WebAssembly browser viewer
-│   ├── Cargo.toml
-│   ├── Trunk.toml
-│   └── src/
+├── crates/
+│   ├── herald-common/      # Shared types, message formats, Grid, CellContent
+│   │   └── src/
+│   ├── herald-server/      # Axum backend — REST API, WebSocket, SQLite persistence
+│   │   ├── migrations/     # SQLite schema migrations
+│   │   ├── src/
+│   │   └── tests/
+│   └── herald-cli/         # ratatui terminal viewer — split-flap TUI with animation
+│       └── src/
+├── scripts/                # PowerShell helper scripts for admin operations
 └── docs/                   # Documentation
-    ├── ARCHITECTURE.md
-    ├── CONTRIBUTING.md
-    ├── DEPLOYMENT.md
-    └── SPEC.md
 ```
 
 ### Crate Dependency Graph
 
 ```
-herald-server ──┐
-herald-cli   ───┼──▶ herald-common
-herald-web   ───┘
+herald-server ───┐
+herald-cli   ────┼──▶ herald-common
 ```
 
-All three application crates depend on `herald-common` for shared types. They do not depend on each other.
+Both application crates depend on `herald-common` for shared types. A future `herald-web` crate will also depend on it.
 
 ---
 
@@ -160,7 +158,6 @@ cargo clippy -- -D warnings
    cargo fmt -- --check
    cargo clippy -- -D warnings
    cargo test
-   cargo build -p herald-web --target wasm32-unknown-unknown
    ```
 
 4. **Push** your branch and open a pull request against `main`.
@@ -175,7 +172,6 @@ cargo clippy -- -D warnings
   - `cargo fmt -- --check`
   - `cargo clippy -- -D warnings`
   - `cargo test`
-  - `cargo build -p herald-web --target wasm32-unknown-unknown`
 - **Be responsive** — if a reviewer requests changes, please address them in a timely manner or let us know if you need help.
 
 ---
@@ -210,15 +206,16 @@ Not sure where to start? Here's a quick orientation:
 
 | I want to work on… | Look at… |
 |---|---|
-| Message format, board types, protocol | `herald-common/` |
-| REST API, admin endpoints | `herald-server/src/api/` |
-| WebSocket handling, real-time push | `herald-server/src/ws/` |
-| Message queue, rotation logic | `herald-server/src/queue/` |
-| Database schema, migrations | `herald-server/src/db/` |
-| Terminal rendering, flip animations | `herald-cli/src/` |
-| Browser UI, Leptos components | `herald-web/src/` |
-| CSS split-flap animations | `herald-web/style/` |
-| Countdown timer logic | `herald-common/src/countdown.rs` |
+| Message format, board types, grid rendering | `crates/herald-common/src/` |
+| REST API, admin endpoints | `crates/herald-server/src/api/` |
+| WebSocket handling, real-time push | `crates/herald-server/src/ws.rs` |
+| Rotation engine, queue logic | `crates/herald-server/src/db.rs` |
+| Database schema, migrations | `crates/herald-server/migrations/` |
+| Terminal rendering, board widget | `crates/herald-cli/src/ui/` |
+| Split-flap animation engine | `crates/herald-cli/src/ui/animation.rs` |
+| CLI command structure | `crates/herald-cli/src/main.rs` |
+| Countdown timer logic | `crates/herald-common/src/countdown.rs` |
+| PowerShell admin scripts | `scripts/` |
 
 For a deeper understanding of how the pieces fit together, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
