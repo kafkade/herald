@@ -3,12 +3,13 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::Widget;
 
-use crate::ws_client::ConnectionState;
+use crate::ws_client::{ConnectionState, QueueInfoState};
 
 pub struct StatusBar<'a> {
     connection_state: &'a ConnectionState,
     server_url: &'a str,
     last_update: Option<std::time::Instant>,
+    queue_info: &'a QueueInfoState,
 }
 
 impl<'a> StatusBar<'a> {
@@ -16,11 +17,13 @@ impl<'a> StatusBar<'a> {
         connection_state: &'a ConnectionState,
         server_url: &'a str,
         last_update: Option<std::time::Instant>,
+        queue_info: &'a QueueInfoState,
     ) -> Self {
         Self {
             connection_state,
             server_url,
             last_update,
+            queue_info,
         }
     }
 
@@ -64,13 +67,27 @@ impl Widget for StatusBar<'_> {
         let left_x = area.x.saturating_add(1);
         buf.set_string(left_x, y, &state_text, Style::default().fg(state_color));
 
-        // Center: server URL
-        let url_len = self.server_url.len() as u16;
-        let center_x = area.x + area.width.saturating_sub(url_len) / 2;
+        // Center: rotation metadata or server URL
+        let center_text = if self.queue_info.total_items > 0 {
+            let idx = self.queue_info.current_index + 1;
+            let total = self.queue_info.total_items;
+            if self.queue_info.is_countdown_active {
+                format!("Item {idx}/{total} · Countdown active")
+            } else {
+                format!(
+                    "Item {idx}/{total} · Next in {}s",
+                    self.queue_info.next_rotation_seconds
+                )
+            }
+        } else {
+            self.server_url.to_string()
+        };
+        let center_len = center_text.len() as u16;
+        let center_x = area.x + area.width.saturating_sub(center_len) / 2;
         buf.set_string(
             center_x,
             y,
-            self.server_url,
+            &center_text,
             Style::default().fg(Color::DarkGray),
         );
 
@@ -97,7 +114,8 @@ mod tests {
         let area = Rect::new(0, 0, 80, 1);
         let mut buf = Buffer::empty(area);
 
-        let widget = StatusBar::new(&state, "ws://localhost:3000/ws", None);
+        let queue_info = QueueInfoState::default();
+        let widget = StatusBar::new(&state, "ws://localhost:3000/ws", None, &queue_info);
         widget.render(area, &mut buf);
 
         let content: String = (0..area.width)
@@ -120,7 +138,8 @@ mod tests {
         let area = Rect::new(0, 0, 100, 1);
         let mut buf = Buffer::empty(area);
 
-        let widget = StatusBar::new(&state, "ws://localhost:3000/ws", None);
+        let queue_info = QueueInfoState::default();
+        let widget = StatusBar::new(&state, "ws://localhost:3000/ws", None, &queue_info);
         widget.render(area, &mut buf);
 
         let content: String = (0..area.width)

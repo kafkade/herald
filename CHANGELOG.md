@@ -32,3 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-countdown zero behavior: `ShowZero`, `Remove`, `Pause`, and `ShowMessage` when countdown reaches zero
 - Soft-delete for expired queue items (preserved in history with `deleted_at` timestamp)
 - Periodic cleanup task (60s interval) that auto-expires messages past their `expires_at` time
+- Default "HERALD" splash screen displayed when the queue is empty
+- Rotation metadata (`queue_info`) broadcast alongside every board update for viewer status bars
+- Rotation progress display in CLI status bar ("Item 2/5 · Next in 18s" or "Countdown active")
