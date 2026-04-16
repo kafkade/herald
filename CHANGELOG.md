@@ -50,6 +50,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All PowerShell scripts auto-detect `$env:HERALD_ADMIN_TOKEN`, removing the need to pass `-Token` every time
 - `add-color-message.ps1` script to push messages with colored tile fills (`-Color`, `-FillRows`, `-BgColor`)
 - `remove-countdown.ps1` script to remove countdowns by ID or all at once
+- Web viewer crate (`herald-web`) with Leptos CSR and Trunk build tooling
+- WebSocket client for the browser with auto-detected server URL and exponential backoff reconnection
+- 6×22 split-flap board grid rendered with CSS Grid, dark theme, and 3D perspective tilt
+- Split-flap tile component with top/bottom half rendering and visible horizontal split line
+- 3D CSS flip animation on board transitions (150ms per flap, top-half rotates away then bottom-half drops in)
+- Left-to-right cascade stagger effect on web flip animations (20ms column delay, ~615ms full board)
+- Color tile rendering with 8 Vestaboard-compatible colors mapped to CSS custom properties for theming
+- Connection status bar with live connected/reconnecting indicator
+- Responsive board layout with mobile horizontal scroll and large-screen centering
+- Loading shimmer animation for tiles before WebSocket connection is established
+- Fine-grained reactive signals (one per cell) for optimal re-render performance — only changed cells update
 
 ### Changed
 
