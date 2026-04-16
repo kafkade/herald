@@ -38,3 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Text-based message creation via `POST /api/messages` with `{"text": "..."}` — auto-renders to 6×22 grid with word-wrapping, alignment, and character normalization
 - Dual-mode message API: accepts either `text` (auto-rendered) or `grid` (raw 6×22) for both create and update
 - Source text preservation on messages for round-trip editing and alignment reflow
+- Split-flap flip animation in `herald watch` — tiles cycle through intermediate characters with a "─X─" mid-flip visual when the board transitions between messages
+- Left-to-right cascade stagger effect: columns start their flip animation with a 20ms delay between each, creating the characteristic split-flap wave
+- Time-based animation engine with configurable step duration (50ms/char) and column stagger (20ms), smooth mid-animation restarts when new board updates arrive
