@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Web viewer development proxy configuration in `Trunk.toml` (auto-proxies `/api` and `/ws` to the server)
+- Web viewer section in README with setup instructions for both production and development modes
+
+### Changed
+
+- Countdown animations in `herald watch` now use instant card-flip instead of cycling through intermediate characters, preventing animation overlap with 1-second countdown ticks
+
+### Fixed
+
+- Trunk dev server proxy error (`UnsupportedUrlScheme`) when connecting to the WebSocket backend
+
 ## [0.5.0] - 2026-04-16
 
 ### Added

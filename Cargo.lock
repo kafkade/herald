@@ -1097,7 +1097,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "herald-cli"
-version = "0.5.0"
+version = "0.5.2"
 dependencies = [
  "clap",
  "crossterm",
@@ -1113,7 +1113,7 @@ dependencies = [
 
 [[package]]
 name = "herald-common"
-version = "0.5.0"
+version = "0.5.2"
 dependencies = [
  "chrono",
  "serde",
@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "herald-server"
-version = "0.5.0"
+version = "0.5.2"
 dependencies = [
  "axum",
  "chrono",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "herald-web"
-version = "0.5.0"
+version = "0.5.2"
 dependencies = [
  "console_error_panic_hook",
  "console_log",
