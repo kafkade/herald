@@ -1,11 +1,13 @@
-use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent, Color};
+use herald_common::{BOARD_COLS, BOARD_ROWS, CellContent, Color};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Position, Rect},
-    style::{Color as RatatuiColor, Style},
+    style::{Color as RatatuiColor, Modifier, Style},
     text::Text,
     widgets::{Paragraph, Widget},
 };
+
+use super::display_state::{CellDisplayState, DisplayGrid};
 
 const CELL_WIDTH: u16 = 3;
 const GRID_WIDTH: u16 = BOARD_COLS as u16 * CELL_WIDTH + BOARD_COLS as u16 + 1; // 89
@@ -27,12 +29,12 @@ fn map_color(color: &Color) -> RatatuiColor {
 
 /// A ratatui widget that renders the Herald 6×22 board grid with box-drawing borders.
 pub struct BoardWidget<'a> {
-    board_state: &'a BoardState,
+    display: &'a DisplayGrid,
 }
 
 impl<'a> BoardWidget<'a> {
-    pub fn new(board_state: &'a BoardState) -> Self {
-        Self { board_state }
+    pub fn new(display: &'a DisplayGrid) -> Self {
+        Self { display }
     }
 }
 
@@ -104,32 +106,48 @@ impl<'a> Widget for BoardWidget<'a> {
             // Cell content
             for col in 0..BOARD_COLS as u16 {
                 let x_start = x_offset + col * (CELL_WIDTH + 1) + 1;
-                let content = &self.board_state.grid.0[row as usize][col as usize];
+                let display_cell = &self.display.cells[row as usize][col as usize];
 
-                match content {
-                    CellContent::Char(c) => {
-                        // " c " — character centered in 3 cells
-                        let chars = [' ', *c, ' '];
-                        for (dx, ch) in chars.iter().enumerate() {
-                            if let Some(cell) = buf.cell_mut(Position::new(x_start + dx as u16, y))
-                            {
-                                cell.set_char(*ch);
+                match display_cell {
+                    CellDisplayState::Normal(content) => match content {
+                        CellContent::Char(c) => {
+                            // " c " — character centered in 3 cells
+                            let chars = [' ', *c, ' '];
+                            for (dx, ch) in chars.iter().enumerate() {
+                                if let Some(cell) =
+                                    buf.cell_mut(Position::new(x_start + dx as u16, y))
+                                {
+                                    cell.set_char(*ch);
+                                }
                             }
                         }
-                    }
-                    CellContent::Color(color) => {
-                        let style = Style::default().bg(map_color(color));
-                        for dx in 0..CELL_WIDTH {
-                            if let Some(cell) = buf.cell_mut(Position::new(x_start + dx, y)) {
-                                cell.set_char(' ').set_style(style);
+                        CellContent::Color(color) => {
+                            let style = Style::default().bg(map_color(color));
+                            for dx in 0..CELL_WIDTH {
+                                if let Some(cell) = buf.cell_mut(Position::new(x_start + dx, y)) {
+                                    cell.set_char(' ').set_style(style);
+                                }
                             }
                         }
-                    }
-                    CellContent::Blank => {
-                        for dx in 0..CELL_WIDTH {
-                            if let Some(cell) = buf.cell_mut(Position::new(x_start + dx, y)) {
-                                cell.set_char(' ');
+                        CellContent::Blank => {
+                            for dx in 0..CELL_WIDTH {
+                                if let Some(cell) = buf.cell_mut(Position::new(x_start + dx, y)) {
+                                    cell.set_char(' ');
+                                }
                             }
+                        }
+                    },
+                    CellDisplayState::Flipping(ch) => {
+                        // "─X─" with dim style on the flap dashes
+                        let dim = Style::default().add_modifier(Modifier::DIM);
+                        if let Some(cell) = buf.cell_mut(Position::new(x_start, y)) {
+                            cell.set_char('─').set_style(dim);
+                        }
+                        if let Some(cell) = buf.cell_mut(Position::new(x_start + 1, y)) {
+                            cell.set_char(*ch);
+                        }
+                        if let Some(cell) = buf.cell_mut(Position::new(x_start + 2, y)) {
+                            cell.set_char('─').set_style(dim);
                         }
                     }
                 }
@@ -141,17 +159,18 @@ impl<'a> Widget for BoardWidget<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use herald_common::BoardState;
     use ratatui::buffer::Buffer;
     use ratatui::layout::Rect;
 
-    fn blank_board() -> BoardState {
-        BoardState::default()
+    fn blank_display() -> DisplayGrid {
+        DisplayGrid::from_board_state(&BoardState::default())
     }
 
     #[test]
     fn too_small_shows_warning() {
-        let state = blank_board();
-        let widget = BoardWidget::new(&state);
+        let dg = blank_display();
+        let widget = BoardWidget::new(&dg);
         let area = Rect::new(0, 0, 40, 5);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -170,27 +189,23 @@ mod tests {
 
     #[test]
     fn renders_corners() {
-        let state = blank_board();
-        let widget = BoardWidget::new(&state);
+        let dg = blank_display();
+        let widget = BoardWidget::new(&dg);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
 
-        // Top-left corner
         assert_eq!(buf.cell(Position::new(0, 0)).unwrap().symbol(), "┌");
-        // Top-right corner
         assert_eq!(
             buf.cell(Position::new(GRID_WIDTH - 1, 0)).unwrap().symbol(),
             "┐"
         );
-        // Bottom-left corner
         assert_eq!(
             buf.cell(Position::new(0, GRID_HEIGHT - 1))
                 .unwrap()
                 .symbol(),
             "└"
         );
-        // Bottom-right corner
         assert_eq!(
             buf.cell(Position::new(GRID_WIDTH - 1, GRID_HEIGHT - 1))
                 .unwrap()
@@ -201,9 +216,9 @@ mod tests {
 
     #[test]
     fn renders_char_cell() {
-        let mut state = blank_board();
-        state.grid.0[0][0] = CellContent::Char('H');
-        let widget = BoardWidget::new(&state);
+        let mut dg = blank_display();
+        dg.cells[0][0] = CellDisplayState::Normal(CellContent::Char('H'));
+        let widget = BoardWidget::new(&dg);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -216,14 +231,41 @@ mod tests {
 
     #[test]
     fn renders_color_cell_background() {
-        let mut state = blank_board();
-        state.grid.0[0][0] = CellContent::Color(Color::Red);
-        let widget = BoardWidget::new(&state);
+        let mut dg = blank_display();
+        dg.cells[0][0] = CellDisplayState::Normal(CellContent::Color(Color::Red));
+        let widget = BoardWidget::new(&dg);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
 
         let cell = buf.cell(Position::new(1, 1)).unwrap();
         assert_eq!(cell.bg, RatatuiColor::Red);
+    }
+
+    #[test]
+    fn renders_flipping_cell() {
+        let mut dg = blank_display();
+        dg.cells[0][0] = CellDisplayState::Flipping('A');
+        let widget = BoardWidget::new(&dg);
+        let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
+        let mut buf = Buffer::empty(area);
+        widget.render(area, &mut buf);
+
+        // Cell (0,0) content starts at x=1, y=1 → should be "─A─"
+        assert_eq!(buf.cell(Position::new(1, 1)).unwrap().symbol(), "─");
+        assert_eq!(buf.cell(Position::new(2, 1)).unwrap().symbol(), "A");
+        assert_eq!(buf.cell(Position::new(3, 1)).unwrap().symbol(), "─");
+
+        // The ─ characters should have DIM modifier
+        let left = buf.cell(Position::new(1, 1)).unwrap();
+        assert!(
+            left.modifier.contains(Modifier::DIM),
+            "left dash should be DIM"
+        );
+        let right = buf.cell(Position::new(3, 1)).unwrap();
+        assert!(
+            right.modifier.contains(Modifier::DIM),
+            "right dash should be DIM"
+        );
     }
 }
