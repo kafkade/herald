@@ -148,8 +148,9 @@ fn resolve_update_content(
     }
 
     // Alignment-only update: reflow if source_text exists
-    if (req.h_align.is_some() || req.v_align.is_some()) && existing.source_text.is_some() {
-        let text = existing.source_text.as_ref().unwrap();
+    if let Some(text) = &existing.source_text
+        && (req.h_align.is_some() || req.v_align.is_some())
+    {
         let h_align = req.h_align.unwrap_or(existing.h_align);
         let v_align = req.v_align.unwrap_or(existing.v_align);
         let grid = Grid::from_text(text, h_align, v_align).map_err(ApiError::BadRequest)?;
