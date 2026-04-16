@@ -33,6 +33,7 @@ pub async fn create(
     };
 
     db::create_message(state.pool(), &msg).await?;
+    state.notify_board_update().await;
 
     Ok((StatusCode::CREATED, Json(msg)))
 }
@@ -75,6 +76,8 @@ pub async fn update(
         .await?
         .ok_or_else(|| ApiError::Internal("message disappeared after update".to_string()))?;
 
+    state.notify_board_update().await;
+
     Ok(Json(msg))
 }
 
@@ -86,5 +89,6 @@ pub async fn delete(
     if !deleted {
         return Err(ApiError::NotFound(format!("message {id} not found")));
     }
+    state.notify_board_update().await;
     Ok(StatusCode::NO_CONTENT)
 }

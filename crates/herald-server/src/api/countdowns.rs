@@ -40,6 +40,7 @@ pub async fn create(
     };
 
     db::create_countdown(state.pool(), &cd).await?;
+    state.notify_board_update().await;
 
     Ok((StatusCode::CREATED, Json(cd)))
 }
@@ -81,6 +82,8 @@ pub async fn update(
         .await?
         .ok_or_else(|| ApiError::Internal("countdown disappeared after update".to_string()))?;
 
+    state.notify_board_update().await;
+
     Ok(Json(cd))
 }
 
@@ -92,5 +95,6 @@ pub async fn delete(
     if !deleted {
         return Err(ApiError::NotFound(format!("countdown {id} not found")));
     }
+    state.notify_board_update().await;
     Ok(StatusCode::NO_CONTENT)
 }

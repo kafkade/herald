@@ -2,9 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-use herald_common::ServerMessage;
+use herald_common::{Grid, ServerMessage};
 use sqlx::SqlitePool;
-use tokio::sync::broadcast;
+use tokio::sync::{Mutex, broadcast};
 
 const BROADCAST_CAPACITY: usize = 16;
 
@@ -20,6 +20,9 @@ struct InnerState {
     pub started_at: Instant,
     pub broadcast_tx: broadcast::Sender<ServerMessage>,
     pub viewer_count: AtomicUsize,
+    /// Guards the build-board-state → broadcast path so concurrent mutations
+    /// cannot interleave and produce out-of-order previous_grid values.
+    pub notify_lock: Mutex<Grid>,
 }
 
 impl AppState {
@@ -32,6 +35,7 @@ impl AppState {
                 started_at: Instant::now(),
                 broadcast_tx,
                 viewer_count: AtomicUsize::new(0),
+                notify_lock: Mutex::new(Grid::blank()),
             }),
         }
     }
@@ -71,5 +75,28 @@ impl AppState {
     /// Get the current viewer count.
     pub fn viewer_count(&self) -> usize {
         self.inner.viewer_count.load(Ordering::Relaxed)
+    }
+
+    /// Build the current board state from the database and broadcast it to all connected viewers.
+    /// The entire build → broadcast path is serialized via a Mutex so concurrent
+    /// mutations cannot produce out-of-order `previous_grid` values.
+    pub async fn notify_board_update(&self) {
+        let mut last_grid = self.inner.notify_lock.lock().await;
+
+        match crate::db::build_board_state(self.pool()).await {
+            Ok(mut board_state) => {
+                board_state.previous_grid = last_grid.clone();
+                *last_grid = board_state.grid.clone();
+                drop(last_grid);
+
+                let _ = self.inner.broadcast_tx.send(
+                    herald_common::ServerMessage::BoardUpdate(board_state),
+                );
+            }
+            Err(e) => {
+                drop(last_grid);
+                tracing::error!("Failed to build board state for broadcast: {e}");
+            }
+        }
     }
 }

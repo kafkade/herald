@@ -35,6 +35,7 @@ pub async fn reorder(
     }
 
     db::reorder_queue(state.pool(), &req.order).await?;
+    state.notify_board_update().await;
 
     // Return the updated queue
     let items = db::get_queue(state.pool()).await?;
