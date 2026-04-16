@@ -489,12 +489,10 @@ pub async fn build_board_state(pool: &SqlitePool) -> Result<BoardState, sqlx::Er
     let current_item = &queue[idx];
 
     let grid = match current_item.kind {
-        QueueItemKind::Message => {
-            match get_message(pool, &current_item.id.to_string()).await? {
-                Some(msg) => msg.grid,
-                None => Grid::blank(),
-            }
-        }
+        QueueItemKind::Message => match get_message(pool, &current_item.id.to_string()).await? {
+            Some(msg) => msg.grid,
+            None => Grid::blank(),
+        },
         QueueItemKind::Countdown => {
             // Countdown grid rendering is not yet implemented;
             // broadcast a blank grid so viewers still get the metadata.

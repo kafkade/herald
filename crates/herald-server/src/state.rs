@@ -89,9 +89,10 @@ impl AppState {
                 *last_grid = board_state.grid.clone();
                 drop(last_grid);
 
-                let _ = self.inner.broadcast_tx.send(
-                    herald_common::ServerMessage::BoardUpdate(board_state),
-                );
+                let _ = self
+                    .inner
+                    .broadcast_tx
+                    .send(herald_common::ServerMessage::BoardUpdate(board_state));
             }
             Err(e) => {
                 drop(last_grid);
