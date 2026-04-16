@@ -7,20 +7,27 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 
+use herald_common::{QueueItemKind, ZeroBehavior};
 use state::AppState;
 
 /// Spawn the background rotation task that advances the queue on a timer.
-/// Returns the JoinHandle for the spawned task.
+///
+/// When the current queue item is a countdown, a secondary 1-second refresh
+/// interval runs in parallel with the main rotation timer so the board updates
+/// every second. When the countdown reaches zero, `ZeroBehavior` determines
+/// what happens next (show zero, remove, pause, or show a message).
 pub fn start_rotation_task(state: AppState) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         tracing::info!("Rotation task started");
 
         loop {
-            let interval_secs = match db::get_rotation_interval(state.pool()).await {
+            let pool = state.pool();
+
+            let interval_secs = match db::get_rotation_interval(pool).await {
                 Ok(secs) => secs,
                 Err(e) => {
                     tracing::error!("Failed to read rotation interval: {e}");
-                    10 // fallback default
+                    10
                 }
             };
 
@@ -30,53 +37,246 @@ pub fn start_rotation_task(state: AppState) -> tokio::task::JoinHandle<()> {
                 continue;
             }
 
-            tracing::debug!("Next rotation tick in {interval_secs}s");
+            let current_item = match db::get_current_queue_item(pool).await {
+                Ok(item) => item,
+                Err(e) => {
+                    tracing::error!("Failed to read current queue item: {e}");
+                    tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
+                    continue;
+                }
+            };
 
-            tokio::select! {
-                _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {
-                    match db::get_queue(state.pool()).await {
-                        Ok(queue) if queue.is_empty() => {
-                            tracing::trace!("Rotation tick: queue is empty, nothing to rotate");
+            let current_item = match current_item {
+                Some(item) => item,
+                None => {
+                    tracing::trace!("Rotation tick: queue is empty, waiting");
+                    tokio::select! {
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {}
+                        _ = state.rotation_notified() => {
+                            tracing::debug!("Rotation timer reset (empty queue)");
                         }
-                        Ok(queue) if queue.len() == 1 => {
-                            // Single item — don't advance, but do clean up expired items
-                            // (if the single item is expired, this will remove it)
-                            match db::delete_expired_messages(state.pool()).await {
-                                Ok(0) => {
-                                    tracing::trace!("Rotation tick: single item in queue, skipping rotation");
-                                }
-                                Ok(deleted) => {
-                                    tracing::info!("Rotation: removed {deleted} expired message(s), queue may now be empty");
-                                    state.notify_board_update().await;
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to clean expired messages: {e}");
-                                }
+                    }
+                    continue;
+                }
+            };
+
+            match current_item.kind {
+                QueueItemKind::Countdown => {
+                    run_countdown_mode(&state, interval_secs, &current_item).await;
+                }
+                QueueItemKind::Message => {
+                    run_normal_mode(&state, interval_secs).await;
+                }
+            }
+        }
+    })
+}
+
+/// Normal rotation mode: sleep for the rotation interval, then advance.
+async fn run_normal_mode(state: &AppState, interval_secs: u64) {
+    tracing::debug!("Normal mode: next rotation tick in {interval_secs}s");
+    let pool = state.pool();
+
+    tokio::select! {
+        _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {
+            match db::get_queue(pool).await {
+                Ok(queue) if queue.is_empty() => {
+                    tracing::trace!("Rotation tick: queue is empty");
+                }
+                Ok(queue) if queue.len() == 1 => {
+                    match db::delete_expired_messages(pool).await {
+                        Ok(0) => {
+                            tracing::trace!("Rotation tick: single item, skipping");
+                        }
+                        Ok(deleted) => {
+                            tracing::info!("Rotation: removed {deleted} expired message(s)");
+                            state.notify_board_update().await;
+                        }
+                        Err(e) => tracing::error!("Failed to clean expired messages: {e}"),
+                    }
+                }
+                Ok(_) => {
+                    match db::advance_to_next_valid_item(pool).await {
+                        Ok(deleted) => {
+                            if deleted > 0 {
+                                tracing::info!("Rotation: removed {deleted} expired message(s)");
                             }
+                            tracing::debug!("Rotation tick: advanced to next item");
+                            state.notify_board_update().await;
                         }
-                        Ok(_) => {
-                            // Multiple items — advance with expiry handling
-                            match db::advance_to_next_valid_item(state.pool()).await {
-                                Ok(deleted) => {
-                                    if deleted > 0 {
-                                        tracing::info!("Rotation: removed {deleted} expired message(s)");
-                                    }
-                                    tracing::debug!("Rotation tick: advanced to next item");
-                                    state.notify_board_update().await;
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to advance rotation: {e}");
-                                }
+                        Err(e) => tracing::error!("Failed to advance rotation: {e}"),
+                    }
+                }
+                Err(e) => tracing::error!("Failed to read queue: {e}"),
+            }
+        }
+        _ = state.rotation_notified() => {
+            tracing::debug!("Rotation timer reset");
+        }
+    }
+}
+
+/// Countdown mode: a 1-second refresh interval runs in parallel with the main
+/// rotation timer. Each tick broadcasts a board update so viewers see the
+/// countdown decrement. When it reaches zero, `ZeroBehavior` takes effect.
+async fn run_countdown_mode(state: &AppState, interval_secs: u64, item: &herald_common::QueueItem) {
+    let pool = state.pool();
+    let item_id = item.id.to_string();
+
+    let countdown = match db::get_countdown(pool, &item_id).await {
+        Ok(Some(cd)) => cd,
+        Ok(None) => {
+            tracing::warn!("Countdown '{item_id}' not found, advancing");
+            db::advance_to_next_valid_item(pool).await.ok();
+            state.notify_board_update().await;
+            return;
+        }
+        Err(e) => {
+            tracing::error!("Failed to load countdown '{item_id}': {e}");
+            return;
+        }
+    };
+
+    tracing::debug!(
+        "Countdown mode: '{}' with rotation in {interval_secs}s",
+        item.label
+    );
+
+    let rotation_sleep = tokio::time::sleep(std::time::Duration::from_secs(interval_secs));
+    tokio::pin!(rotation_sleep);
+
+    let mut refresh_interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    refresh_interval.tick().await; // consume the immediate first tick
+
+    let mut is_at_zero = false;
+
+    loop {
+        tokio::select! {
+            _ = &mut rotation_sleep => {
+                // Rotation timer fired — advance to next item
+                match db::get_queue(pool).await {
+                    Ok(queue) if queue.len() <= 1 => {
+                        match db::delete_expired_messages(pool).await {
+                            Ok(deleted) if deleted > 0 => {
+                                tracing::info!("Rotation: removed {deleted} expired message(s)");
                             }
+                            Err(e) => tracing::error!("Failed to clean expired messages: {e}"),
+                            _ => {}
                         }
-                        Err(e) => {
-                            tracing::error!("Failed to read queue for rotation: {e}");
+                        state.notify_board_update().await;
+                    }
+                    Ok(_) => {
+                        match db::advance_to_next_valid_item(pool).await {
+                            Ok(deleted) => {
+                                if deleted > 0 {
+                                    tracing::info!("Rotation: removed {deleted} expired message(s)");
+                                }
+                                tracing::debug!("Rotation tick: advanced past countdown");
+                                state.notify_board_update().await;
+                            }
+                            Err(e) => tracing::error!("Failed to advance rotation: {e}"),
+                        }
+                    }
+                    Err(e) => tracing::error!("Failed to read queue: {e}"),
+                }
+                break;
+            }
+            _ = refresh_interval.tick() => {
+                let now = chrono::Utc::now();
+
+                if !is_at_zero && countdown.target <= now {
+                    is_at_zero = true;
+                    match &countdown.zero_behavior {
+                        ZeroBehavior::ShowZero => {
+                            state.notify_board_update().await;
+                        }
+                        ZeroBehavior::ShowMessage { .. } => {
+                            // TODO: ShowMessage grid override is not yet wired
+                            // through build_board_state; for now, falls through
+                            // to the default zero display (same as ShowZero).
+                            state.notify_board_update().await;
+                        }
+                        ZeroBehavior::Remove => {
+                            db::soft_delete_countdown(pool, &item_id).await.ok();
+                            tracing::info!(
+                                "Countdown '{}' reached zero, removed from queue",
+                                item.label
+                            );
+                            db::advance_to_next_valid_item(pool).await.ok();
+                            state.notify_board_update().await;
+                            break;
+                        }
+                        ZeroBehavior::Pause => {
+                            tracing::info!(
+                                "Countdown '{}' reached zero, pausing rotation",
+                                item.label
+                            );
+                            state.notify_board_update().await;
+                            state.rotation_notified().await;
+                            break;
+                        }
+                    }
+                } else {
+                    state.notify_board_update().await;
+                }
+            }
+            _ = state.rotation_notified() => {
+                tracing::debug!("Rotation timer reset during countdown");
+                break;
+            }
+        }
+    }
+}
+
+/// Spawn a periodic cleanup task that soft-expires items every 60 seconds.
+/// If the currently-displayed item expires, resets the rotation timer to trigger an advance.
+pub fn start_cleanup_task(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        tracing::info!("Cleanup task started (60s interval)");
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        interval.tick().await; // consume immediate first tick
+
+        loop {
+            interval.tick().await;
+
+            // Check which item is currently displayed BEFORE cleanup
+            let current_item_id = match db::get_current_queue_item(state.pool()).await {
+                Ok(Some(item)) => Some(item.id),
+                _ => None,
+            };
+
+            // Soft-expire all messages past their expires_at
+            match db::delete_expired_messages(state.pool()).await {
+                Ok(0) => {
+                    tracing::trace!("Cleanup: no expired items found");
+                }
+                Ok(expired) => {
+                    tracing::info!("Cleanup: soft-expired {expired} message(s)");
+
+                    // Check if the currently-displayed item was among those expired
+                    if let Some(prev_id) = current_item_id {
+                        match db::get_current_queue_item(state.pool()).await {
+                            Ok(Some(new_item)) if new_item.id != prev_id => {
+                                // Current item changed — the displayed item was expired
+                                tracing::info!(
+                                    "Cleanup: currently displayed item was expired, triggering rotation"
+                                );
+                                state.reset_rotation_timer();
+                            }
+                            Ok(None) => {
+                                // Queue is now empty
+                                tracing::info!("Cleanup: queue is now empty after expiry");
+                                state.reset_rotation_timer();
+                            }
+                            _ => {
+                                // Current item unchanged — just broadcast updated state
+                                // (queue may have shrunk but current item is still valid)
+                            }
                         }
                     }
                 }
-                _ = state.rotation_notified() => {
-                    tracing::debug!("Rotation timer reset");
-                    continue;
+                Err(e) => {
+                    tracing::error!("Cleanup: failed to expire messages: {e}");
                 }
             }
         }

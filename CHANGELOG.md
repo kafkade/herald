@@ -28,3 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Background queue rotation task with configurable interval (`rotation_interval_secs` in config)
 - Automatic expired message cleanup during rotation (per spec §5.7)
 - Countdown timer rendering on the board grid with label, formatted time remaining, and template placeholders
+- Real-time countdown refresh (1-second broadcasts) when a countdown is the active display item
+- Per-countdown zero behavior: `ShowZero`, `Remove`, `Pause`, and `ShowMessage` when countdown reaches zero
+- Soft-delete for expired queue items (preserved in history with `deleted_at` timestamp)
+- Periodic cleanup task (60s interval) that auto-expires messages past their `expires_at` time
