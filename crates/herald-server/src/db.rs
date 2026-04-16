@@ -53,7 +53,7 @@ pub async fn create_message(pool: &SqlitePool, msg: &Message) -> Result<(), sqlx
 }
 
 pub async fn list_messages(pool: &SqlitePool) -> Result<Vec<Message>, sqlx::Error> {
-    let rows = sqlx::query("SELECT * FROM messages ORDER BY queue_position ASC, created_at ASC")
+    let rows = sqlx::query("SELECT * FROM messages WHERE deleted_at IS NULL ORDER BY queue_position ASC, created_at ASC")
         .fetch_all(pool)
         .await?;
 
@@ -182,7 +182,7 @@ pub async fn create_countdown(pool: &SqlitePool, cd: &Countdown) -> Result<(), s
 }
 
 pub async fn list_countdowns(pool: &SqlitePool) -> Result<Vec<Countdown>, sqlx::Error> {
-    let rows = sqlx::query("SELECT * FROM countdowns ORDER BY queue_position ASC, created_at ASC")
+    let rows = sqlx::query("SELECT * FROM countdowns WHERE deleted_at IS NULL ORDER BY queue_position ASC, created_at ASC")
         .fetch_all(pool)
         .await?;
 
@@ -277,13 +277,13 @@ fn row_to_countdown(row: &sqlx::sqlite::SqliteRow) -> Countdown {
 pub async fn get_queue(pool: &SqlitePool) -> Result<Vec<QueueItem>, sqlx::Error> {
     // Messages contribute queue items
     let msg_rows = sqlx::query(
-        "SELECT id, queue_position, created_at, expires_at, grid FROM messages ORDER BY queue_position ASC, created_at ASC",
+        "SELECT id, queue_position, created_at, expires_at, grid FROM messages WHERE deleted_at IS NULL ORDER BY queue_position ASC, created_at ASC",
     )
     .fetch_all(pool)
     .await?;
 
     let cd_rows = sqlx::query(
-        "SELECT id, label, queue_position, created_at FROM countdowns ORDER BY queue_position ASC, created_at ASC",
+        "SELECT id, label, queue_position, created_at FROM countdowns WHERE deleted_at IS NULL ORDER BY queue_position ASC, created_at ASC",
     )
     .fetch_all(pool)
     .await?;
@@ -468,7 +468,7 @@ pub async fn next_queue_position(pool: &SqlitePool) -> Result<i64, sqlx::Error> 
 /// Count total queue items.
 pub async fn queue_size(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT (SELECT COUNT(*) FROM messages) + (SELECT COUNT(*) FROM countdowns) as total",
+        "SELECT (SELECT COUNT(*) FROM messages WHERE deleted_at IS NULL) + (SELECT COUNT(*) FROM countdowns WHERE deleted_at IS NULL) as total",
     )
     .fetch_one(pool)
     .await?;
@@ -540,15 +540,41 @@ pub async fn get_rotation_interval(pool: &SqlitePool) -> Result<u64, sqlx::Error
 
 // ── Expiry-aware rotation ───────────────────────────────────────────
 
-/// Delete all messages whose expiry time has passed. Returns the number of deleted messages.
+/// Soft-delete all messages whose expiry time has passed. Returns the number of expired messages.
 pub async fn delete_expired_messages(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
     let now = chrono::Utc::now().to_rfc3339();
+    let result = sqlx::query(
+        "UPDATE messages SET deleted_at = ? WHERE expires_at IS NOT NULL AND expires_at <= ? AND deleted_at IS NULL",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
+/// Soft-delete a specific countdown by setting deleted_at.
+pub async fn soft_delete_countdown(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
+    let now = chrono::Utc::now().to_rfc3339();
     let result =
-        sqlx::query("DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?")
+        sqlx::query("UPDATE countdowns SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL")
             .bind(&now)
+            .bind(id)
             .execute(pool)
             .await?;
-    Ok(result.rows_affected())
+    Ok(result.rows_affected() > 0)
+}
+
+/// Get the current queue item based on the rotation index.
+/// Returns None if the queue is empty.
+pub async fn get_current_queue_item(pool: &SqlitePool) -> Result<Option<QueueItem>, sqlx::Error> {
+    let queue = get_queue(pool).await?;
+    if queue.is_empty() {
+        return Ok(None);
+    }
+    let current_idx = get_current_index(pool).await?;
+    let idx = (current_idx as usize) % queue.len();
+    Ok(Some(queue[idx].clone()))
 }
 
 /// Update the last_rotation timestamp to now.

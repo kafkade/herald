@@ -37,6 +37,7 @@ async fn main() {
     // Build app
     let state = AppState::new(pool, admin_token);
     herald_server::start_rotation_task(state.clone());
+    herald_server::start_cleanup_task(state.clone());
     let app = build_router(state);
 
     // Start server
