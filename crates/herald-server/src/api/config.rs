@@ -24,6 +24,7 @@ pub async fn update(
     }
 
     db::set_config(state.pool(), &req.values).await?;
+    state.reset_rotation_timer();
     let config = db::get_config(state.pool()).await?;
     Ok(Json(config))
 }

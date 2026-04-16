@@ -34,6 +34,7 @@ pub async fn create(
 
     db::create_message(state.pool(), &msg).await?;
     state.notify_board_update().await;
+    state.reset_rotation_timer();
 
     Ok((StatusCode::CREATED, Json(msg)))
 }
@@ -90,5 +91,6 @@ pub async fn delete(
         return Err(ApiError::NotFound(format!("message {id} not found")));
     }
     state.notify_board_update().await;
+    state.reset_rotation_timer();
     Ok(StatusCode::NO_CONTENT)
 }

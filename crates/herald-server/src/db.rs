@@ -494,9 +494,10 @@ pub async fn build_board_state(pool: &SqlitePool) -> Result<BoardState, sqlx::Er
             None => Grid::blank(),
         },
         QueueItemKind::Countdown => {
-            // Countdown grid rendering is not yet implemented;
-            // broadcast a blank grid so viewers still get the metadata.
-            Grid::blank()
+            match get_countdown(pool, &current_item.id.to_string()).await? {
+                Some(cd) => herald_common::render_countdown_grid(&cd, chrono::Utc::now()),
+                None => Grid::blank(),
+            }
         }
     };
 
@@ -512,4 +513,63 @@ pub async fn build_board_state(pool: &SqlitePool) -> Result<BoardState, sqlx::Er
         current_item: Some(item_info),
         timestamp: chrono::Utc::now(),
     })
+}
+
+/// Advance the rotation index to the next queue item and return the new index.
+pub async fn advance_current_index(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
+    sqlx::query("UPDATE rotation_state SET current_index = current_index + 1 WHERE id = 1")
+        .execute(pool)
+        .await?;
+    get_current_index(pool).await
+}
+
+/// Read the rotation interval from the config table. Defaults to 10 seconds.
+pub async fn get_rotation_interval(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let row = sqlx::query("SELECT value FROM configuration WHERE key = 'rotation_interval_secs'")
+        .fetch_optional(pool)
+        .await?;
+
+    match row {
+        Some(row) => {
+            let value: String = row.get("value");
+            Ok(value.parse::<u64>().unwrap_or(10))
+        }
+        None => Ok(10),
+    }
+}
+
+// ── Expiry-aware rotation ───────────────────────────────────────────
+
+/// Delete all messages whose expiry time has passed. Returns the number of deleted messages.
+pub async fn delete_expired_messages(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let result =
+        sqlx::query("DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?")
+            .bind(&now)
+            .execute(pool)
+            .await?;
+    Ok(result.rows_affected())
+}
+
+/// Update the last_rotation timestamp to now.
+pub async fn update_last_rotation(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query("UPDATE rotation_state SET last_rotation = ? WHERE id = 1")
+        .bind(&now)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Advance the rotation to the next valid (non-expired) queue item.
+///
+/// Returns the number of expired messages that were deleted.
+///
+/// After this call, `build_board_state` will return the next valid item
+/// (or a default empty state if the queue is now empty).
+pub async fn advance_to_next_valid_item(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let deleted = delete_expired_messages(pool).await?;
+    advance_current_index(pool).await?;
+    update_last_rotation(pool).await?;
+    Ok(deleted)
 }

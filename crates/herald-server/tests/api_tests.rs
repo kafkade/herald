@@ -1073,3 +1073,317 @@ async fn ws_initial_state_with_existing_message() {
     drop(ws_stream);
     cleanup(&db_path);
 }
+
+// ── Rotation & expiry tests ─────────────────────────────────────
+
+#[tokio::test]
+async fn rotation_advance_cycles_through_queue() {
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Create 3 messages (A, B, C) via HTTP
+    let client = reqwest::Client::new();
+    let mut message_ids = Vec::new();
+    for label in &["AAA", "BBB", "CCC"] {
+        let resp = client
+            .post(format!("http://{addr}/api/messages"))
+            .header("authorization", format!("Bearer {TEST_TOKEN}"))
+            .json(&serde_json::json!({
+                "grid": text_grid(label),
+                "h_align": "center",
+                "v_align": "middle"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        message_ids.push(body["id"].as_str().unwrap().to_string());
+    }
+
+    let pool = state.pool();
+
+    // Initial board state should show the first message (index 0)
+    let board = herald_server::db::build_board_state(pool).await.unwrap();
+    let item = board
+        .current_item
+        .as_ref()
+        .expect("should have a current item");
+    assert_eq!(item.id.to_string(), message_ids[0]);
+
+    // Advance → should show message B
+    herald_server::db::advance_to_next_valid_item(pool)
+        .await
+        .unwrap();
+    let board = herald_server::db::build_board_state(pool).await.unwrap();
+    let item = board
+        .current_item
+        .as_ref()
+        .expect("should have a current item");
+    assert_eq!(item.id.to_string(), message_ids[1]);
+
+    // Advance → should show message C
+    herald_server::db::advance_to_next_valid_item(pool)
+        .await
+        .unwrap();
+    let board = herald_server::db::build_board_state(pool).await.unwrap();
+    let item = board
+        .current_item
+        .as_ref()
+        .expect("should have a current item");
+    assert_eq!(item.id.to_string(), message_ids[2]);
+
+    // Advance again → should wrap back to message A
+    herald_server::db::advance_to_next_valid_item(pool)
+        .await
+        .unwrap();
+    let board = herald_server::db::build_board_state(pool).await.unwrap();
+    let item = board
+        .current_item
+        .as_ref()
+        .expect("should have a current item");
+    assert_eq!(item.id.to_string(), message_ids[0]);
+
+    cleanup(&db_path);
+}
+
+#[tokio::test]
+async fn rotation_skips_and_deletes_expired_messages() {
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let client = reqwest::Client::new();
+
+    // Create a normal (non-expiring) message
+    let resp = client
+        .post(format!("http://{addr}/api/messages"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .json(&serde_json::json!({
+            "grid": text_grid("KEEP"),
+            "h_align": "center",
+            "v_align": "middle"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+    let keep_id = resp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Create an already-expired message
+    let resp = client
+        .post(format!("http://{addr}/api/messages"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .json(&serde_json::json!({
+            "grid": text_grid("EXPIRED"),
+            "h_align": "center",
+            "v_align": "middle",
+            "expires_at": "2020-01-01T00:00:00Z"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+
+    let pool = state.pool();
+
+    // Before cleanup, queue should have 2 items
+    let queue = herald_server::db::get_queue(pool).await.unwrap();
+    assert_eq!(queue.len(), 2);
+
+    // advance_to_next_valid_item deletes expired messages
+    let deleted = herald_server::db::advance_to_next_valid_item(pool)
+        .await
+        .unwrap();
+    assert!(
+        deleted >= 1,
+        "should have deleted at least 1 expired message"
+    );
+
+    // Queue should now have only the non-expired message
+    let queue = herald_server::db::get_queue(pool).await.unwrap();
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue[0].id.to_string(), keep_id);
+
+    // Board state should show the kept message
+    let board = herald_server::db::build_board_state(pool).await.unwrap();
+    let item = board
+        .current_item
+        .as_ref()
+        .expect("should have a current item");
+    assert_eq!(item.id.to_string(), keep_id);
+
+    cleanup(&db_path);
+}
+
+#[tokio::test]
+async fn rotation_all_expired_results_in_empty_board() {
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let client = reqwest::Client::new();
+
+    // Create 2 already-expired messages
+    for label in &["GONE1", "GONE2"] {
+        let resp = client
+            .post(format!("http://{addr}/api/messages"))
+            .header("authorization", format!("Bearer {TEST_TOKEN}"))
+            .json(&serde_json::json!({
+                "grid": text_grid(label),
+                "h_align": "center",
+                "v_align": "middle",
+                "expires_at": "2020-01-01T00:00:00Z"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+    }
+
+    let pool = state.pool();
+
+    // Before cleanup, queue should have 2 items
+    let queue = herald_server::db::get_queue(pool).await.unwrap();
+    assert_eq!(queue.len(), 2);
+
+    // advance_to_next_valid_item should delete both expired messages
+    let deleted = herald_server::db::advance_to_next_valid_item(pool)
+        .await
+        .unwrap();
+    assert_eq!(deleted, 2, "should have deleted 2 expired messages");
+
+    // Queue should be empty
+    let queue = herald_server::db::get_queue(pool).await.unwrap();
+    assert!(
+        queue.is_empty(),
+        "queue should be empty after all messages expired"
+    );
+
+    // Board state should be default (no current_item)
+    let board = herald_server::db::build_board_state(pool).await.unwrap();
+    assert!(
+        board.current_item.is_none(),
+        "current_item should be None when all messages are expired"
+    );
+
+    cleanup(&db_path);
+}
+
+// ── Countdown rendering tests ───────────────────────────────────
+
+#[tokio::test]
+async fn countdown_renders_on_board_state() {
+    let db_path = format!(
+        "herald_test_{}.db",
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+    let database_url = format!("sqlite:{db_path}");
+    let pool = herald_server::db::init_pool(&database_url).await.unwrap();
+    let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
+    let app = herald_server::build_router(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Create a countdown 1 hour in the future
+    let client = reqwest::Client::new();
+    let future_time = chrono::Utc::now() + chrono::Duration::hours(1);
+    let resp = client
+        .post(format!("http://{addr}/api/countdowns"))
+        .header("authorization", format!("Bearer {TEST_TOKEN}"))
+        .json(&serde_json::json!({
+            "label": "LAUNCH",
+            "target": future_time.to_rfc3339()
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+
+    // Build the board state — should have the countdown rendered (not blank)
+    let board_state = herald_server::db::build_board_state(state.pool()).await.unwrap();
+
+    // current_item should be the countdown
+    let item = board_state.current_item.unwrap();
+    assert_eq!(item.kind, herald_common::QueueItemKind::Countdown);
+    assert_eq!(item.label, "LAUNCH");
+
+    // Grid should NOT be entirely blank (countdown renders label + time)
+    let has_content = board_state.grid.0.iter().any(|row| {
+        row.iter().any(|cell| *cell != herald_common::CellContent::Blank)
+    });
+    assert!(has_content, "countdown grid should have rendered content, not be blank");
+
+    // Row 0 should contain the label "LAUNCH"
+    let row0_chars: String = board_state.grid.0[0]
+        .iter()
+        .filter_map(|c| match c {
+            herald_common::CellContent::Char(ch) => Some(*ch),
+            _ => None,
+        })
+        .collect();
+    assert!(row0_chars.contains("LAUNCH"), "row 0 should contain the label LAUNCH, got: {row0_chars}");
+
+    // Row 3 should contain time digits (at least "00" from hours/minutes/seconds)
+    let row3_chars: String = board_state.grid.0[3]
+        .iter()
+        .filter_map(|c| match c {
+            herald_common::CellContent::Char(ch) => Some(*ch),
+            _ => None,
+        })
+        .collect();
+    assert!(!row3_chars.is_empty(), "row 3 should contain formatted time");
+
+    // Rows 2 and 5 should be blank (separator rows)
+    for col in 0..herald_common::BOARD_COLS {
+        assert_eq!(board_state.grid.0[2][col], herald_common::CellContent::Blank);
+        assert_eq!(board_state.grid.0[5][col], herald_common::CellContent::Blank);
+    }
+
+    cleanup(&db_path);
+}
