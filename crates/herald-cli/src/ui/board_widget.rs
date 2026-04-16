@@ -197,6 +197,21 @@ impl<'a> Widget for BoardWidget<'a> {
                             cell.set_char('─').set_style(dim);
                         }
                     }
+                    CellDisplayState::FlippingColor(color) => {
+                        // Color tile mid-flip: show the color with a horizontal divider
+                        let use_256 = supports_256_colors();
+                        let bg = map_color_with_fallback(color, use_256);
+                        let style = Style::default().bg(bg).add_modifier(Modifier::DIM);
+                        if let Some(cell) = buf.cell_mut(Position::new(x_start, y)) {
+                            cell.set_char('▄').set_style(style);
+                        }
+                        if let Some(cell) = buf.cell_mut(Position::new(x_start + 1, y)) {
+                            cell.set_char('─').set_style(style);
+                        }
+                        if let Some(cell) = buf.cell_mut(Position::new(x_start + 2, y)) {
+                            cell.set_char('▀').set_style(style);
+                        }
+                    }
                 }
             }
         }

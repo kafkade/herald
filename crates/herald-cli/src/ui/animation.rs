@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent};
+use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent, Color};
 
 use super::display_state::{CellDisplayState, DisplayGrid};
 
@@ -10,6 +10,18 @@ pub const CHAR_SET: &[char] = &[
     ' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
     'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '!',
     '@', '#', '$', '%', '&', '(', ')', '-', '+', '=', ';', ':', '\'', '"', ',', '.', '/', '?', '*',
+];
+
+/// The ordered color cycle for split-flap color tiles.
+pub const COLOR_SET: &[Color] = &[
+    Color::Red,
+    Color::Orange,
+    Color::Yellow,
+    Color::Green,
+    Color::Blue,
+    Color::Violet,
+    Color::White,
+    Color::Black,
 ];
 
 /// Find a character's position in `CHAR_SET`.
@@ -49,37 +61,101 @@ pub fn cycling_steps(from: char, to: char) -> Vec<char> {
     steps
 }
 
+/// Find a color's position in `COLOR_SET`.
+pub fn color_index(color: &Color) -> usize {
+    COLOR_SET.iter().position(|c| c == color).unwrap_or(0)
+}
+
+/// Compute the intermediate colors when cycling forward through `COLOR_SET`.
+/// Returns the sequence excluding `from` but including `to`.
+pub fn color_cycling_steps(from: &Color, to: &Color) -> Vec<Color> {
+    if from == to {
+        return Vec::new();
+    }
+    let from_idx = color_index(from);
+    let to_idx = color_index(to);
+    let len = COLOR_SET.len();
+    let mut steps = Vec::with_capacity(len);
+    let mut i = (from_idx + 1) % len;
+    loop {
+        steps.push(COLOR_SET[i]);
+        if i == to_idx {
+            break;
+        }
+        i = (i + 1) % len;
+    }
+    steps
+}
+
 /// Extract the displayable character from a `CellDisplayState`.
-fn display_char(state: &CellDisplayState) -> Option<char> {
+/// Color cells are treated as space for animation purposes so they participate in cycling.
+fn display_char(state: &CellDisplayState) -> char {
     match state {
-        CellDisplayState::Normal(CellContent::Char(c)) => Some(*c),
-        CellDisplayState::Normal(CellContent::Blank) => Some(' '),
-        CellDisplayState::Normal(CellContent::Color(_)) => None,
-        CellDisplayState::Flipping(c) => Some(*c),
+        CellDisplayState::Normal(CellContent::Char(c)) => *c,
+        CellDisplayState::Normal(CellContent::Blank) => ' ',
+        CellDisplayState::Normal(CellContent::Color(_)) => ' ',
+        CellDisplayState::Flipping(c) => *c,
+        CellDisplayState::FlippingColor(_) => ' ',
     }
 }
 
 /// Map a target `CellContent` to the character used in the char set.
-fn target_char(content: &CellContent) -> Option<char> {
+/// Color cells are treated as space for animation purposes.
+fn target_char(content: &CellContent) -> char {
     match content {
-        CellContent::Char(c) => Some(*c),
-        CellContent::Blank => Some(' '),
-        CellContent::Color(_) => None,
+        CellContent::Char(c) => *c,
+        CellContent::Blank => ' ',
+        CellContent::Color(_) => ' ',
     }
+}
+
+/// Check if the display state and target content are actually different,
+/// even when their animation characters are the same (e.g., Blank vs Color both map to ' ').
+fn from_state_differs_from_target(from: &CellDisplayState, to: &CellContent) -> bool {
+    match from {
+        CellDisplayState::Normal(content) => content != to,
+        CellDisplayState::Flipping(_) | CellDisplayState::FlippingColor(_) => true,
+    }
+}
+
+/// Extract the color from a display state, if it's a color cell.
+fn display_color(state: &CellDisplayState) -> Option<Color> {
+    match state {
+        CellDisplayState::Normal(CellContent::Color(c)) => Some(*c),
+        CellDisplayState::FlippingColor(c) => Some(*c),
+        _ => None,
+    }
+}
+
+/// The kind of cycling animation for a cell.
+enum AnimationKind {
+    /// Cycling through characters (for Char/Blank cells).
+    Char { steps: Vec<char>, from_char: char },
+    /// Cycling through colors (for Color cells).
+    ColorCycle {
+        steps: Vec<Color>,
+        from_color: Color,
+    },
 }
 
 /// Per-cell animation state.
 struct CellAnimation {
-    /// Characters to cycle through (from `cycling_steps`), including the final target.
-    steps: Vec<char>,
+    kind: AnimationKind,
     /// When this cell's animation was created (used with `delay` to compute start).
     created_at: Instant,
     /// Cascade delay before this cell starts cycling.
     delay: Duration,
-    /// The original character being displayed when animation started.
-    from_char: char,
     /// The target cell content (for producing the final `CellDisplayState`).
     target: CellContent,
+}
+
+impl CellAnimation {
+    fn step_count(&self) -> usize {
+        match &self.kind {
+            AnimationKind::Char { steps, .. } => steps.len(),
+            AnimationKind::ColorCycle { steps, .. } => steps.len(),
+        }
+    }
 }
 
 /// Manages the animation of the full board transitioning from one state to another.
@@ -115,24 +191,107 @@ impl BoardAnimation {
                 let from_state = &from.cells[row][col];
                 let to_content = &to.grid.0[row][col];
 
-                let anim = match (display_char(from_state), target_char(to_content)) {
-                    (Some(from_ch), Some(to_ch)) if from_ch != to_ch => {
-                        let steps = cycling_steps(from_ch, to_ch);
+                // Determine if this is a color-to-color transition
+                let from_color = display_color(from_state);
+                let to_color = match to_content {
+                    CellContent::Color(c) => Some(*c),
+                    _ => None,
+                };
+
+                let anim = match (from_color, to_color) {
+                    // Color → Color: cycle through intermediate colors
+                    (Some(fc), Some(tc)) if fc != tc => {
+                        let steps = color_cycling_steps(&fc, &tc);
                         Some(CellAnimation {
-                            steps,
+                            kind: AnimationKind::ColorCycle {
+                                steps,
+                                from_color: fc,
+                            },
                             created_at: now,
                             delay: stagger_per_column * col as u32,
-                            from_char: from_ch,
                             target: *to_content,
                         })
                     }
-                    (Some(_from_ch), Some(_to_ch)) => {
-                        // Same character — no animation needed
-                        None
+                    // Same color → no animation
+                    (Some(_), Some(_)) => None,
+                    // Non-color → Color: char-cycle to space then snap to color
+                    (None, Some(tc)) => {
+                        let from_ch = display_char(from_state);
+                        if from_ch == ' ' {
+                            // Already at space — do a short color ramp from Red to target
+                            let steps = color_cycling_steps(&Color::Red, &tc);
+                            let mut full = vec![Color::Red];
+                            full.extend_from_slice(&steps);
+                            Some(CellAnimation {
+                                kind: AnimationKind::ColorCycle {
+                                    steps: full,
+                                    from_color: Color::Red,
+                                },
+                                created_at: now,
+                                delay: stagger_per_column * col as u32,
+                                target: *to_content,
+                            })
+                        } else {
+                            // Char → Color: flip through chars to space, then land on color
+                            let steps = cycling_steps(from_ch, ' ');
+                            Some(CellAnimation {
+                                kind: AnimationKind::Char {
+                                    steps,
+                                    from_char: from_ch,
+                                },
+                                created_at: now,
+                                delay: stagger_per_column * col as u32,
+                                target: *to_content,
+                            })
+                        }
                     }
-                    (None, _) | (_, None) => {
-                        // Color cells or unknown — snap immediately, no animation
-                        None
+                    // Color → Non-color: cycle through colors briefly then land on target
+                    (Some(fc), None) => {
+                        let color_steps: Vec<Color> = COLOR_SET
+                            .iter()
+                            .cycle()
+                            .skip(color_index(&fc) + 1)
+                            .take(3)
+                            .copied()
+                            .collect();
+                        Some(CellAnimation {
+                            kind: AnimationKind::ColorCycle {
+                                steps: color_steps,
+                                from_color: fc,
+                            },
+                            created_at: now,
+                            delay: stagger_per_column * col as u32,
+                            target: *to_content,
+                        })
+                    }
+                    // Non-color → Non-color: standard char cycling
+                    (None, None) => {
+                        let from_ch = display_char(from_state);
+                        let to_ch = target_char(to_content);
+                        if from_ch != to_ch {
+                            let steps = cycling_steps(from_ch, to_ch);
+                            Some(CellAnimation {
+                                kind: AnimationKind::Char {
+                                    steps,
+                                    from_char: from_ch,
+                                },
+                                created_at: now,
+                                delay: stagger_per_column * col as u32,
+                                target: *to_content,
+                            })
+                        } else if from_state_differs_from_target(from_state, to_content) {
+                            Some(CellAnimation {
+                                kind: AnimationKind::Char {
+                                    steps: vec!['A', to_ch],
+                                    from_char: from_ch,
+                                },
+                                created_at: now,
+                                delay: stagger_per_column * col as u32,
+                                target: *to_content,
+                            })
+                        } else {
+                            None
+                        }
                     }
                 };
 
@@ -157,38 +316,7 @@ impl BoardAnimation {
         for row in 0..BOARD_ROWS {
             let mut row_cells = Vec::with_capacity(BOARD_COLS);
             for col in 0..BOARD_COLS {
-                let state = match &self.cells[row][col] {
-                    None => {
-                        // No animation — show target content as Normal
-                        CellDisplayState::Normal(self.target.grid.0[row][col])
-                    }
-                    Some(anim) => {
-                        let effective_start = anim.created_at + anim.delay;
-                        if now < effective_start {
-                            // Before cascade delay — show original character
-                            cell_display_for_char(anim.from_char)
-                        } else if anim.steps.is_empty() {
-                            // No steps (same char or snap) — show target
-                            CellDisplayState::Normal(anim.target)
-                        } else {
-                            let elapsed = now.duration_since(effective_start);
-                            let step_idx =
-                                (elapsed.as_nanos() / self.step_duration.as_nanos()) as usize;
-
-                            if step_idx >= anim.steps.len() {
-                                // Animation complete — show final target
-                                CellDisplayState::Normal(anim.target)
-                            } else if step_idx == anim.steps.len() - 1 {
-                                // On the last step — show the target character as Normal
-                                CellDisplayState::Normal(anim.target)
-                            } else {
-                                // Mid-cycling — show as Flipping
-                                CellDisplayState::Flipping(anim.steps[step_idx])
-                            }
-                        }
-                    }
-                };
-                row_cells.push(state);
+                row_cells.push(self.sample_cell(row, col, now));
             }
             grid_cells.push(row_cells);
         }
@@ -211,28 +339,46 @@ impl BoardAnimation {
     pub fn sample_into(&self, now: Instant, display: &mut DisplayGrid) {
         for row in 0..BOARD_ROWS {
             for col in 0..BOARD_COLS {
-                let state = match &self.cells[row][col] {
-                    None => CellDisplayState::Normal(self.target.grid.0[row][col]),
-                    Some(anim) => {
-                        let effective_start = anim.created_at + anim.delay;
-                        if now < effective_start {
-                            cell_display_for_char(anim.from_char)
-                        } else if anim.steps.is_empty() {
-                            CellDisplayState::Normal(anim.target)
-                        } else {
-                            let elapsed = now.duration_since(effective_start);
-                            let step_idx =
-                                (elapsed.as_nanos() / self.step_duration.as_nanos()) as usize;
+                display.set(row, col, self.sample_cell(row, col, now));
+            }
+        }
+    }
 
-                            if step_idx >= anim.steps.len() - 1 {
-                                CellDisplayState::Normal(anim.target)
-                            } else {
-                                CellDisplayState::Flipping(anim.steps[step_idx])
+    /// Sample a single cell's animation state at a given instant.
+    fn sample_cell(&self, row: usize, col: usize, now: Instant) -> CellDisplayState {
+        match &self.cells[row][col] {
+            None => CellDisplayState::Normal(self.target.grid.0[row][col]),
+            Some(anim) => {
+                let effective_start = anim.created_at + anim.delay;
+                if now < effective_start {
+                    // Before cascade delay — show original state
+                    match &anim.kind {
+                        AnimationKind::Char { from_char, .. } => cell_display_for_char(*from_char),
+                        AnimationKind::ColorCycle { from_color, .. } => {
+                            CellDisplayState::Normal(CellContent::Color(*from_color))
+                        }
+                    }
+                } else if anim.step_count() == 0 {
+                    CellDisplayState::Normal(anim.target)
+                } else {
+                    let elapsed = now.duration_since(effective_start);
+                    let step_idx = (elapsed.as_nanos() / self.step_duration.as_nanos()) as usize;
+
+                    if step_idx >= anim.step_count().saturating_sub(1) {
+                        // Animation complete — show final target
+                        CellDisplayState::Normal(anim.target)
+                    } else {
+                        // Mid-cycling
+                        match &anim.kind {
+                            AnimationKind::Char { steps, .. } => {
+                                CellDisplayState::Flipping(steps[step_idx])
+                            }
+                            AnimationKind::ColorCycle { steps, .. } => {
+                                CellDisplayState::FlippingColor(steps[step_idx])
                             }
                         }
                     }
-                };
-                display.set(row, col, state);
+                }
             }
         }
     }
@@ -241,7 +387,8 @@ impl BoardAnimation {
     pub fn is_complete(&self, now: Instant) -> bool {
         for row in &self.cells {
             for anim in row.iter().flatten() {
-                if anim.steps.is_empty() {
+                let count = anim.step_count();
+                if count == 0 {
                     continue;
                 }
                 let effective_start = anim.created_at + anim.delay;
@@ -250,7 +397,7 @@ impl BoardAnimation {
                 }
                 let elapsed = now.duration_since(effective_start);
                 let steps_completed = (elapsed.as_nanos() / self.step_duration.as_nanos()) as usize;
-                if steps_completed < anim.steps.len().saturating_sub(1) {
+                if steps_completed < count.saturating_sub(1) {
                     return false;
                 }
             }
@@ -355,7 +502,10 @@ mod tests {
         // Cell (0,0) should have animation: ' ' → 'C' = ['A', 'B', 'C']
         assert!(anim.cells[0][0].is_some());
         let cell_anim = anim.cells[0][0].as_ref().unwrap();
-        assert_eq!(cell_anim.steps, vec!['A', 'B', 'C']);
+        match &cell_anim.kind {
+            AnimationKind::Char { steps, .. } => assert_eq!(*steps, vec!['A', 'B', 'C']),
+            _ => panic!("Expected Char animation kind"),
+        }
     }
 
     #[test]
@@ -490,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn test_color_cells_snap_immediately() {
+    fn test_color_cells_animate_with_flip() {
         let display = make_blank_display();
         let mut target = BoardState::default();
         target.grid = Grid::blank();
@@ -503,11 +653,12 @@ mod tests {
             Duration::from_millis(20),
         );
 
-        // Color cells should have no animation
-        assert!(anim.cells[0][0].is_none());
+        // Color cells should now have animation (blank → color both map to ' ',
+        // but content differs so a short flip is created)
+        assert!(anim.cells[0][0].is_some());
 
-        // And should show target immediately
-        let sampled = anim.sample(anim.created_at);
+        // After animation completes, should show the color
+        let sampled = anim.sample(anim.created_at + Duration::from_secs(5));
         match &sampled.cells[0][0] {
             CellDisplayState::Normal(CellContent::Color(Color::Red)) => {} // correct
             other => panic!("Expected Normal(Color(Red)), got {other:?}"),
@@ -541,10 +692,15 @@ mod tests {
 
         // The animation should start from 'B' (current visible), not from ' '
         let cell_anim = anim2.cells[0][0].as_ref().unwrap();
-        assert_eq!(cell_anim.from_char, 'B');
-        // 'B' → 'A' forward-cycling should go: C, D, E, ..., Z, 0-9, punctuation, ' ', A
-        assert_eq!(*cell_anim.steps.last().unwrap(), 'A');
-        assert!(cell_anim.steps.len() > 2); // definitely wraps around
+        match &cell_anim.kind {
+            AnimationKind::Char { from_char, steps } => {
+                assert_eq!(*from_char, 'B');
+                // 'B' → 'A' forward-cycling should go: C, D, E, ..., Z, 0-9, punctuation, ' ', A
+                assert_eq!(*steps.last().unwrap(), 'A');
+                assert!(steps.len() > 2); // definitely wraps around
+            }
+            _ => panic!("Expected Char animation kind"),
+        }
     }
 
     #[test]

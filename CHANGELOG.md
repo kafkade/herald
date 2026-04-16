@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Optimized animation rendering: pre-allocated display buffers and frame-skip logic for smooth 30fps playback
+- Color tiles now animate with a split-flap color cycling effect on board transitions, flipping through intermediate colors (e.g., Red → Orange → Yellow → Green → Blue) instead of snapping instantly
 
 ### Fixed
 

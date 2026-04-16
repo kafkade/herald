@@ -1,4 +1,4 @@
-use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent};
+use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent, Color};
 
 /// What to display in a single cell during rendering.
 #[derive(Clone, Debug)]
@@ -7,6 +7,8 @@ pub enum CellDisplayState {
     Normal(CellContent),
     /// Show a character mid-flip (the intermediate cycling character, with flap visual).
     Flipping(char),
+    /// Show a color tile mid-flip (cycling through intermediate colors).
+    FlippingColor(Color),
 }
 
 /// The display state for the full board — drives what BoardWidget actually renders.
@@ -71,8 +73,8 @@ mod tests {
             for (c, cell) in row.iter().enumerate() {
                 match cell {
                     CellDisplayState::Normal(_) => {} // ok
-                    CellDisplayState::Flipping(_) => {
-                        panic!("Expected Normal at ({r},{c}), got Flipping");
+                    other => {
+                        panic!("Expected Normal at ({r},{c}), got {other:?}");
                     }
                 }
             }
