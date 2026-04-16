@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Herald — Split-Flap Message Board</title>
+    <link data-trunk rel="rust" data-wasm-opt="z" />
+    <style>
+        /* ===== Reset & Base ===== */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            /* Board dimensions */
+            --board-cols: 22;
+            --board-rows: 6;
+            --tile-gap: 2px;
+
+            /* Tile sizing */
+            --tile-width: clamp(1.5rem, 3vw, 2.8rem);
+            --tile-height: clamp(2rem, 4vw, 3.6rem);
+
+            /* Colors */
+            --board-bg: #1a1a1a;
+            --tile-top-bg: #2c2c2c;
+            --tile-bottom-bg: #262626;
+            --tile-char-color: #f0f0f0;
+            --tile-split-line: #111;
+            --board-shadow: rgba(0, 0, 0, 0.4);
+
+            /* Color tiles */
+            --color-red: #D32F2F;
+            --color-orange: #F57C00;
+            --color-yellow: #FDD835;
+            --color-green: #388E3C;
+            --color-blue: #1565C0;
+            --color-violet: #7B1FA2;
+            --color-white: #F5F5F5;
+            --color-black: #212121;
+
+            /* Animation timing */
+            --flip-duration: 150ms;
+            --stagger-delay: 20ms;
+        }
+
+        body {
+            background: #0d0d0d;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, sans-serif;
+            color: #f0f0f0;
+            overflow: hidden;
+        }
+
+        /* ===== Board Container ===== */
+        .herald-board {
+            perspective: 1200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .board-grid {
+            display: grid;
+            grid-template-columns: repeat(var(--board-cols), var(--tile-width));
+            grid-template-rows: repeat(var(--board-rows), var(--tile-height));
+            gap: var(--tile-gap);
+            padding: 1rem;
+            background: var(--board-bg);
+            border-radius: 8px;
+            box-shadow:
+                0 4px 12px var(--board-shadow),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transform: perspective(1200px) rotateX(2deg);
+        }
+
+        /* ===== Flap Tile ===== */
+        .flap-tile {
+            position: relative;
+            width: var(--tile-width);
+            height: var(--tile-height);
+            perspective: 300px;
+            transform-style: preserve-3d;
+            will-change: transform;
+            contain: layout style paint;
+            box-shadow:
+                0 1px 3px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(0, 0, 0, 0.15);
+        }
+
+        .flap-tile--idle {
+            will-change: auto;
+        }
+
+        .flap-tile .flap-char {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: clamp(0.9rem, 1.8vw, 1.6rem);
+            font-weight: 700;
+            color: var(--tile-char-color);
+            line-height: 1;
+            user-select: none;
+        }
+
+        /* Top and bottom halves */
+        .flap-top,
+        .flap-bottom {
+            position: absolute;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+
+        .flap-top {
+            top: 0;
+            height: 50%;
+            background: var(--tile-top-bg);
+            border-radius: 4px 4px 0 0;
+            border-bottom: 1px solid var(--tile-split-line);
+            clip-path: inset(0 0 0 0);
+        }
+
+        .flap-top .flap-char {
+            transform: translateY(50%);
+        }
+
+        .flap-bottom {
+            bottom: 0;
+            height: 50%;
+            background: var(--tile-bottom-bg);
+            border-radius: 0 0 4px 4px;
+            clip-path: inset(0 0 0 0);
+        }
+
+        .flap-bottom .flap-char {
+            transform: translateY(-50%);
+        }
+
+        /* ===== Flip Keyframes ===== */
+        @keyframes flap-top-flip {
+            0% { transform: rotateX(0deg); }
+            100% { transform: rotateX(-90deg); }
+        }
+
+        @keyframes flap-bottom-flip {
+            0% { transform: rotateX(90deg); }
+            100% { transform: rotateX(0deg); }
+        }
+
+        .flap-top--flipping {
+            animation: flap-top-flip var(--flip-duration) ease-in forwards;
+            transform-origin: bottom center;
+        }
+
+        .flap-bottom-flip {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: var(--tile-top-bg);
+            border-radius: 0 0 4px 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            transform-origin: top center;
+            animation: flap-bottom-flip var(--flip-duration) ease-out var(--flip-duration) forwards;
+            transform: rotateX(90deg);
+        }
+
+        .flap-bottom-flip .flap-char {
+            transform: translateY(-50%);
+        }
+
+        /* Enhanced shadow during flip */
+        .flap-top--flipping,
+        .flap-bottom-flip {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Static top (new char after animation) */
+        .flap-top--static {
+            transform: rotateX(0deg);
+        }
+
+        /* ===== Cascade Stagger ===== */
+        .flap-top--flipping,
+        .flap-bottom-flip {
+            animation-delay: calc(var(--col-index, 0) * var(--stagger-delay));
+        }
+        .flap-bottom-flip {
+            animation-delay: calc(var(--col-index, 0) * var(--stagger-delay) + var(--flip-duration));
+        }
+
+        /* ===== Color Tiles ===== */
+        .flap-tile--color .flap-top,
+        .flap-tile--color .flap-bottom,
+        .flap-tile--color .flap-bottom-flip {
+            border-bottom: none;
+            border-radius: 4px;
+        }
+
+        .flap-tile--color .flap-char {
+            display: none;
+        }
+
+        /* Dark text for light color tiles */
+        .flap-tile--light .flap-char {
+            color: #212121;
+        }
+
+        /* ===== Loading State ===== */
+        @keyframes tile-shimmer {
+            0% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+            100% { opacity: 0.3; }
+        }
+
+        .flap-tile--loading .flap-top,
+        .flap-tile--loading .flap-bottom {
+            background: var(--board-bg);
+            animation: tile-shimmer 1.5s ease-in-out infinite;
+        }
+
+        /* ===== Status Bar ===== */
+        .board-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: #888;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #555;
+        }
+
+        .status-indicator.connected {
+            background: #4caf50;
+        }
+
+        .status-indicator.connecting {
+            background: #ff9800;
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        .status-indicator.disconnected {
+            background: #f44336;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 480px) {
+            .herald-board {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .board-grid {
+                min-width: 33rem;
+            }
+        }
+
+        @media (min-width: 1200px) {
+            .herald-board {
+                max-width: 65rem;
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Leptos will mount here -->
+</body>
+</html>

@@ -1,0 +1,23 @@
+[package]
+name = "herald-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Web viewer for the Herald split-flap message board"
+
+[dependencies]
+herald-common = { workspace = true }
+uuid = { workspace = true, features = ["js"] }
+leptos = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+gloo-net = { workspace = true }
+gloo-timers = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true }
+js-sys = { workspace = true }
+log = { workspace = true }
+console_log = { workspace = true }
+console_error_panic_hook = { workspace = true }
+futures = { workspace = true }
