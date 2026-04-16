@@ -27,11 +27,17 @@ impl WsClient {
 
     /// Run the connection loop. Connects to the server, receives messages,
     /// and reconnects with exponential backoff on disconnection.
-    /// This runs forever and should be spawned as a tokio task.
+    /// Stops automatically when all watch receivers are dropped.
+    /// Should be spawned as a tokio task.
     pub async fn run(&self) {
         let mut backoff_secs = INITIAL_BACKOFF_SECS;
 
         loop {
+            if self.board_tx.is_closed() {
+                tracing::info!("All receivers dropped, stopping WS client");
+                return;
+            }
+
             match tokio_tungstenite::connect_async(&self.server_url).await {
                 Ok((ws_stream, _)) => {
                     tracing::info!("Connected to {}", self.server_url);
@@ -44,7 +50,12 @@ impl WsClient {
                             Some(Ok(Message::Text(text))) => {
                                 match serde_json::from_str::<ServerMessage>(&text) {
                                     Ok(ServerMessage::BoardUpdate(board_state)) => {
-                                        let _ = self.board_tx.send(board_state);
+                                        if self.board_tx.send(board_state).is_err() {
+                                            tracing::info!(
+                                                "All receivers dropped, stopping WS client"
+                                            );
+                                            return;
+                                        }
                                     }
                                     Ok(_other) => {
                                         tracing::trace!("Received non-board message, skipping");
@@ -63,10 +74,7 @@ impl WsClient {
                                 }
                             }
                             Some(Ok(Message::Close(_))) => {
-                                tracing::info!(
-                                    "Server closed connection to {}",
-                                    self.server_url
-                                );
+                                tracing::info!("Server closed connection to {}", self.server_url);
                                 break;
                             }
                             Some(Ok(_)) => {
@@ -77,10 +85,7 @@ impl WsClient {
                                 break;
                             }
                             None => {
-                                tracing::info!(
-                                    "WebSocket stream ended for {}",
-                                    self.server_url
-                                );
+                                tracing::info!("WebSocket stream ended for {}", self.server_url);
                                 break;
                             }
                         }
@@ -93,10 +98,13 @@ impl WsClient {
                     );
                     tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
                     backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
+                    continue;
                 }
             }
 
-            // Brief pause before reconnecting after a clean disconnect
+            // Brief pause before reconnecting after a clean disconnect.
+            // Only reached after a successful connection that later disconnected.
+            // The `continue` in the Err branch skips this to avoid double-sleeping.
             tokio::time::sleep(Duration::from_secs(INITIAL_BACKOFF_SECS)).await;
         }
     }

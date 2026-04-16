@@ -27,7 +27,9 @@ async fn handle_connection(mut socket: WebSocket, state: AppState) {
                 Ok(text) => {
                     if socket.send(Message::Text(text.into())).await.is_err() {
                         let viewer_count = state.remove_viewer();
-                        tracing::info!("WebSocket client disconnected during initial state send (viewers: {viewer_count})");
+                        tracing::info!(
+                            "WebSocket client disconnected during initial state send (viewers: {viewer_count})"
+                        );
                         return;
                     }
                 }

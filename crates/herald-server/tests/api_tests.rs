@@ -963,8 +963,14 @@ async fn ws_initial_state_empty_board() {
         // Verify message format has all expected fields
         assert_eq!(parsed["type"], "board_update");
         assert!(parsed["grid"].is_array(), "missing 'grid' field");
-        assert!(parsed.get("previous_grid").is_some(), "missing 'previous_grid' field");
-        assert!(parsed.get("timestamp").is_some(), "missing 'timestamp' field");
+        assert!(
+            parsed.get("previous_grid").is_some(),
+            "missing 'previous_grid' field"
+        );
+        assert!(
+            parsed.get("timestamp").is_some(),
+            "missing 'timestamp' field"
+        );
 
         // Empty board: no queue items (field omitted by skip_serializing_if or null)
         assert!(
@@ -1040,7 +1046,10 @@ async fn ws_initial_state_with_existing_message() {
         assert!(parsed["grid"].is_array());
 
         // current_item should be populated with the message we created
-        assert!(parsed["current_item"].is_object(), "expected current_item to be populated");
+        assert!(
+            parsed["current_item"].is_object(),
+            "expected current_item to be populated"
+        );
         assert_eq!(parsed["current_item"]["kind"], "message");
 
         // Grid should contain non-blank content (the message we posted)
@@ -1053,7 +1062,10 @@ async fn ws_initial_state_with_existing_message() {
                     && cell != &serde_json::json!(null)
             })
         });
-        assert!(has_non_blank, "grid should contain the message content, not be entirely blank");
+        assert!(
+            has_non_blank,
+            "grid should contain the message content, not be entirely blank"
+        );
     } else {
         panic!("expected text message, got {:?}", received);
     }
