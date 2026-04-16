@@ -8,21 +8,43 @@ use tokio_tungstenite::tungstenite::Message;
 const INITIAL_BACKOFF_SECS: u64 = 1;
 const MAX_BACKOFF_SECS: u64 = 30;
 
+/// Connection state visible to the UI layer.
+#[derive(Clone, Debug)]
+pub enum ConnectionState {
+    /// Initial connection attempt in progress.
+    Connecting,
+    /// WebSocket connection is active.
+    Connected,
+    /// Connection lost, attempting to reconnect.
+    Reconnecting { attempt: u32, next_retry_secs: u64 },
+    /// Disconnected (all receivers dropped or permanently failed).
+    Disconnected,
+}
+
 pub struct WsClient {
     server_url: String,
     board_tx: watch::Sender<BoardState>,
+    conn_tx: watch::Sender<ConnectionState>,
 }
 
 impl WsClient {
-    /// Create a new WsClient and return it along with a watch::Receiver
-    /// that will be updated whenever a new BoardState arrives from the server.
-    pub fn new(server_url: String) -> (Self, watch::Receiver<BoardState>) {
+    /// Create a new WsClient and return it along with watch receivers for
+    /// board state updates and connection state changes.
+    pub fn new(
+        server_url: String,
+    ) -> (
+        Self,
+        watch::Receiver<BoardState>,
+        watch::Receiver<ConnectionState>,
+    ) {
         let (board_tx, board_rx) = watch::channel(BoardState::default());
+        let (conn_tx, conn_rx) = watch::channel(ConnectionState::Connecting);
         let client = Self {
             server_url,
             board_tx,
+            conn_tx,
         };
-        (client, board_rx)
+        (client, board_rx, conn_rx)
     }
 
     /// Run the connection loop. Connects to the server, receives messages,
@@ -31,17 +53,30 @@ impl WsClient {
     /// Should be spawned as a tokio task.
     pub async fn run(&self) {
         let mut backoff_secs = INITIAL_BACKOFF_SECS;
+        let mut attempt: u32 = 0;
 
         loop {
             if self.board_tx.is_closed() {
+                let _ = self.conn_tx.send(ConnectionState::Disconnected);
                 tracing::info!("All receivers dropped, stopping WS client");
                 return;
+            }
+
+            if attempt == 0 {
+                let _ = self.conn_tx.send(ConnectionState::Connecting);
+            } else {
+                let _ = self.conn_tx.send(ConnectionState::Reconnecting {
+                    attempt,
+                    next_retry_secs: backoff_secs,
+                });
             }
 
             match tokio_tungstenite::connect_async(&self.server_url).await {
                 Ok((ws_stream, _)) => {
                     tracing::info!("Connected to {}", self.server_url);
+                    let _ = self.conn_tx.send(ConnectionState::Connected);
                     backoff_secs = INITIAL_BACKOFF_SECS;
+                    attempt = 0;
 
                     let (mut sink, mut stream) = ws_stream.split();
 
@@ -92,19 +127,27 @@ impl WsClient {
                     }
                 }
                 Err(err) => {
+                    attempt += 1;
                     tracing::warn!(
                         "Connection to {} failed: {err}. Retrying in {backoff_secs}s...",
                         self.server_url
                     );
+                    let _ = self.conn_tx.send(ConnectionState::Reconnecting {
+                        attempt,
+                        next_retry_secs: backoff_secs,
+                    });
                     tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
                     backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
                     continue;
                 }
             }
 
-            // Brief pause before reconnecting after a clean disconnect.
-            // Only reached after a successful connection that later disconnected.
-            // The `continue` in the Err branch skips this to avoid double-sleeping.
+            // After a successful connection ends, signal reconnecting before the pause.
+            attempt += 1;
+            let _ = self.conn_tx.send(ConnectionState::Reconnecting {
+                attempt,
+                next_retry_secs: INITIAL_BACKOFF_SECS,
+            });
             tokio::time::sleep(Duration::from_secs(INITIAL_BACKOFF_SECS)).await;
         }
     }
