@@ -176,11 +176,27 @@ impl BoardAnimation {
     /// - `to`: the new target `BoardState`
     /// - `step_duration`: time per character step (~50ms)
     /// - `stagger_per_column`: cascade delay between columns (~20ms)
+    #[allow(dead_code)] // Used by tests; production code calls with_options directly
     pub fn new(
         from: &DisplayGrid,
         to: &BoardState,
         step_duration: Duration,
         stagger_per_column: Duration,
+    ) -> Self {
+        Self::with_options(from, to, step_duration, stagger_per_column, false)
+    }
+
+    /// Create a board animation with a direct "card flip" mode.
+    ///
+    /// When `instant_flip` is true, changed cells snap directly to their target
+    /// in a single step instead of cycling through intermediate characters.
+    /// Used for countdown ticks where the seconds change every second.
+    pub fn with_options(
+        from: &DisplayGrid,
+        to: &BoardState,
+        step_duration: Duration,
+        stagger_per_column: Duration,
+        instant_flip: bool,
     ) -> Self {
         let now = Instant::now();
         let mut cells = Vec::with_capacity(BOARD_ROWS);
@@ -264,12 +280,17 @@ impl BoardAnimation {
                             target: *to_content,
                         })
                     }
-                    // Non-color → Non-color: standard char cycling
+                    // Non-color → Non-color: standard char cycling (or instant flip)
                     (None, None) => {
                         let from_ch = display_char(from_state);
                         let to_ch = target_char(to_content);
                         if from_ch != to_ch {
-                            let steps = cycling_steps(from_ch, to_ch);
+                            let steps = if instant_flip {
+                                // Card flip: snap directly to target in one step
+                                vec![to_ch]
+                            } else {
+                                cycling_steps(from_ch, to_ch)
+                            };
                             Some(CellAnimation {
                                 kind: AnimationKind::Char {
                                     steps,

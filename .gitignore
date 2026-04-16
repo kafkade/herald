@@ -1,6 +1,25 @@
+# Build artifacts
 /target
+dist/
+web-dist/
+
+# SQLite databases
 *.db
 *.db-wal
 *.db-shm
 herald_test_*
-web-dist/
+
+# Environment & secrets
+.env
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor swap files
+*.swp
+*.swo
+*~
+
+# Trunk cache
+.trunk/

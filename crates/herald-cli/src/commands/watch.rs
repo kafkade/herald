@@ -165,11 +165,12 @@ async fn run_tui(
                         anim.sample_into(Instant::now(), &mut current_display);
                     }
 
-                    let new_anim = BoardAnimation::new(
+                    let new_anim = BoardAnimation::with_options(
                         &current_display,
                         &new_board,
                         speed.step_duration(),
                         speed.stagger_per_column(),
+                        queue_rx.borrow().is_countdown_active,
                     );
 
                     if new_anim.has_changes() {

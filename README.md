@@ -18,6 +18,7 @@ Herald is an open-source, split-flap / Vestaboard-style digital message board an
 - **Countdown timers** mixed into the rotation with real-time ticking
 - **Real-time WebSocket push** to all connected viewers
 - **Terminal viewer** — split-flap flip animations with left-to-right cascade stagger
+- **Web viewer** — Leptos + WebAssembly with 3D CSS flip animations, responsive scaling, and real-time WebSocket connection
 - **ANSI 256-color support** — vibrant color tiles with automatic fallback for basic terminals
 - **Animation speed control** — `fast`, `normal`, `slow`, or `off`
 - **Simple auth** — single admin with bearer-token authentication
@@ -27,7 +28,6 @@ Herald is an open-source, split-flap / Vestaboard-style digital message board an
 
 ### Roadmap (not yet implemented)
 
-- Browser viewer (Leptos + WebAssembly with 3D CSS flip animations)
 - Admin web panel and CLI admin subcommands
 - Docker packaging and deployment tooling
 - Sound effects, themes, scheduling, rate limiting
@@ -127,6 +127,33 @@ $env:HERALD_ADMIN_TOKEN = "your-token-here"
 .\scripts\set-rotation-interval.ps1 -Seconds 15
 ```
 
+### 5. Open the web viewer
+
+**Option A — Served from the server (production-style):**
+
+```powershell
+# Build the web assets (requires Trunk: cargo install trunk)
+.\scripts\build-web.ps1
+
+# Restart the server — it auto-detects web-dist/
+cargo run -p herald-server
+```
+
+Open `http://localhost:3000` in your browser. The server serves both the API and the web viewer.
+
+**Option B — Development with hot-reload:**
+
+```powershell
+# Terminal 1: start the server
+cargo run -p herald-server
+
+# Terminal 2: start the Trunk dev server
+cd crates\herald-web
+trunk serve
+```
+
+Open `http://localhost:8080` — Trunk serves the web viewer with live-reload and proxies API/WebSocket requests to the server.
+
 ### Using curl instead
 
 ```bash
@@ -166,6 +193,7 @@ All scripts live in `scripts/` and auto-detect `$env:HERALD_ADMIN_TOKEN`. Pass `
 | `remove-message.ps1` | Remove by `-Id`, `-All`, or list messages (no args) |
 | `list-queue.ps1` | Show all messages and countdowns in the rotation |
 | `set-rotation-interval.ps1` | Set rotation speed in `-Seconds` |
+| `build-web.ps1` | Build `herald-web` with Trunk and copy output to `web-dist/` |
 
 ---
 
@@ -176,8 +204,9 @@ Herald is structured as a Cargo workspace:
 ```
 crates/
   herald-common/    — Shared types (Grid, CellContent, Message, Countdown, etc.)
-  herald-server/    — Axum REST API + WebSocket + SQLite persistence
+  herald-server/    — Axum REST API + WebSocket + SQLite persistence + static file serving
   herald-cli/       — Terminal viewer (ratatui TUI) with split-flap animation
+  herald-web/       — Browser viewer (Leptos + Wasm) with 3D CSS flip animations
 ```
 
 ```
@@ -192,13 +221,14 @@ crates/
          │                             │
 ┌────────▼─────────┐        ┌─────────▼─────────┐
 │   herald-cli     │        │   herald-web      │
-│  (ratatui TUI)   │        │   (future)        │
-└────────┬─────────┘        └───────────────────┘
-         │
-┌────────▼─────────┐
-│  herald-common   │
-│  (shared types)  │
-└──────────────────┘
+│  (ratatui TUI)   │        │  (Leptos + Wasm)  │
+└────────┬─────────┘        └─────────┬─────────┘
+         │                            │
+         └────────────┬───────────────┘
+              ┌───────▼───────┐
+              │ herald-common │
+              │ (shared types)│
+              └───────────────┘
 ```
 
 **Data flow:** HTTP request → Axum handler → SQLite → JSON response. Board state broadcast via WebSocket to all connected viewers on every mutation.
@@ -266,19 +296,39 @@ Zero behaviors: `show_zero`, `remove`, `pause`, `show_message`.
 | `HERALD_DB_PATH` | `herald.db` | SQLite database file path |
 | `HERALD_PORT` | `3000` | Server listen port |
 | `HERALD_LOG_LEVEL` | `info` | Log level (trace, debug, info, warn, error) |
+| `HERALD_WEB_DIR` | `./web-dist` | Directory for compiled web viewer assets (auto-detected) |
 
 ---
 
 ## 🧪 Development
 
 ```bash
-cargo build                       # Debug build
+cargo build                       # Debug build (server + CLI)
 cargo test                        # Run all tests (~90 tests)
 cargo clippy                      # Lint
 cargo fmt                         # Format
 cargo run -p herald-server        # Start the server
 cargo run -p herald-cli -- watch  # Start the terminal viewer
 ```
+
+### Web viewer development
+
+```bash
+# Prerequisites (one-time)
+rustup target add wasm32-unknown-unknown
+cargo install trunk
+
+# Check the web crate compiles
+cargo check -p herald-web --target wasm32-unknown-unknown
+
+# Build for production
+.\scripts\build-web.ps1 -Release
+
+# Dev server with hot-reload (in crates/herald-web/)
+trunk serve
+```
+
+Note: `herald-web` is excluded from the default workspace members since it requires the `wasm32-unknown-unknown` target. Use `-p herald-web --target wasm32-unknown-unknown` when checking or building it directly.
 
 ---
 
