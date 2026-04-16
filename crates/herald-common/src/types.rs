@@ -88,14 +88,14 @@ impl Grid {
         let upper = ch.to_uppercase().next().unwrap_or(ch);
         match upper {
             'A'..='Z' | '0'..='9' | ' ' => Some(upper),
-            '!' | '@' | '#' | '$' | '%' | '&' | '(' | ')' | '-' | '+' | '=' | ';' | ':'
-            | '\'' | '"' | ',' | '.' | '/' | '?' | '*' => Some(upper),
+            '!' | '@' | '#' | '$' | '%' | '&' | '(' | ')' | '-' | '+' | '=' | ';' | ':' | '\''
+            | '"' | ',' | '.' | '/' | '?' | '*' => Some(upper),
             // Common typographic mappings
             '\u{2019}' | '\u{2018}' => Some('\''), // smart quotes
             '\u{201C}' | '\u{201D}' => Some('"'),  // smart double quotes
-            '\u{2014}' | '\u{2013}' => Some('-'),   // em/en dash
-            '\u{2026}' => Some('.'),                 // ellipsis → period
-            _ => None,                               // unsupported → blank
+            '\u{2014}' | '\u{2013}' => Some('-'),  // em/en dash
+            '\u{2026}' => Some('.'),               // ellipsis → period
+            _ => None,                             // unsupported → blank
         }
     }
 

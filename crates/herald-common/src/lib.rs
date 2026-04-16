@@ -115,12 +115,8 @@ mod tests {
     #[test]
     fn from_text_word_wraps() {
         // "AAAA BBBB CCCC DDDD EEEE FFFF" → wraps to multiple lines
-        let grid = Grid::from_text(
-            "AAAA BBBB CCCC DDDD EEEE FFFF",
-            HAlign::Center,
-            VAlign::Top,
-        )
-        .unwrap();
+        let grid =
+            Grid::from_text("AAAA BBBB CCCC DDDD EEEE FFFF", HAlign::Center, VAlign::Top).unwrap();
         // First line should have some words, second line the rest
         let line0 = row_text(&grid, 0);
         let line1 = row_text(&grid, 1);
