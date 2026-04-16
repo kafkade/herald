@@ -24,3 +24,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Terminal board viewer (`herald watch`) with live-updating 6×22 grid, color tile rendering, and centered viewport
 - Connection status bar showing state (Connected/Connecting/Reconnecting/Disconnected), server URL, and time since last update
 - `--fps` option on `herald watch` to control UI refresh rate (default 30)
+- Server-side WebSocket ping/pong heartbeat (30s interval, 10s timeout) to detect and close stale connections
