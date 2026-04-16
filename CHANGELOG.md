@@ -44,3 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Board diff detection: only changed cells animate on board transitions, identical boards skip animation entirely
 - Terminal resize handling: board re-centers on resize, in-progress animations cancel and snap to target state
 - PowerShell helper scripts (`scripts/`) for common operations: `add-message`, `remove-message`, `add-countdown`, `set-rotation-interval`
+- ANSI 256-color support for color tiles with automatic fallback to basic 8-color mode on older terminals
+- `--animation-speed` flag on `herald watch`: `fast`, `normal` (default), `slow`, or `off` to control flip animation timing
+- `list-queue.ps1` script to display all messages and countdowns currently in the rotation queue
+- All PowerShell scripts auto-detect `$env:HERALD_ADMIN_TOKEN`, removing the need to pass `-Token` every time
+
+### Changed
+
+- Optimized animation rendering: pre-allocated display buffers and frame-skip logic for smooth 30fps playback

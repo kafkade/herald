@@ -34,6 +34,20 @@ impl DisplayGrid {
             cells: vec![vec![CellDisplayState::Normal(CellContent::Blank); BOARD_COLS]; BOARD_ROWS],
         }
     }
+
+    /// Set a cell in the display grid.
+    pub fn set(&mut self, row: usize, col: usize, state: CellDisplayState) {
+        self.cells[row][col] = state;
+    }
+
+    /// Overwrite every cell from a `BoardState`, reusing the existing allocation.
+    pub fn fill_from_board_state(&mut self, state: &BoardState) {
+        for (r, row) in state.grid.0.iter().enumerate() {
+            for (c, cell) in row.iter().enumerate() {
+                self.cells[r][c] = CellDisplayState::Normal(*cell);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

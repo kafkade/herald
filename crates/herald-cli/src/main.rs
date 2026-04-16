@@ -3,6 +3,7 @@ mod ui;
 mod ws_client;
 
 use clap::{Parser, Subcommand};
+use commands::watch::AnimationSpeed;
 
 #[derive(Parser)]
 #[command(name = "herald")]
@@ -24,6 +25,9 @@ enum Command {
         /// Target frames per second for the UI refresh rate
         #[arg(long, default_value_t = 30)]
         fps: u16,
+        /// Animation speed: fast, normal, slow, or off
+        #[arg(long, default_value = "normal")]
+        animation_speed: AnimationSpeed,
     },
     /// Push a message to the board
     Push,
@@ -40,7 +44,11 @@ async fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Command::Watch { server, fps } => commands::watch::run(server, fps).await,
+        Command::Watch {
+            server,
+            fps,
+            animation_speed,
+        } => commands::watch::run(server, fps, animation_speed).await,
         Command::Serve => {
             eprintln!("serve is not yet implemented");
             Ok(())

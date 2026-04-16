@@ -2,12 +2,14 @@
 .SYNOPSIS
     Add a countdown timer to the Herald board rotation.
 .EXAMPLE
-    .\add-countdown.ps1 -Token "mytoken" -Label "LAUNCH" -Target "2026-12-31T00:00:00Z"
-    .\add-countdown.ps1 -Token "mytoken" -Label "MEETING" -InMinutes 45
-    .\add-countdown.ps1 -Token "mytoken" -Label "DEADLINE" -InHours 8
+    .\add-countdown.ps1 -Label "LAUNCH" -Target "2026-12-31T00:00:00Z"
+    .\add-countdown.ps1 -Label "MEETING" -InMinutes 45
+    .\add-countdown.ps1 -Label "DEADLINE" -InHours 8
+.NOTES
+    Uses $env:HERALD_ADMIN_TOKEN if -Token is not provided.
 #>
 param(
-    [Parameter(Mandatory)][string]$Token,
+    [string]$Token,
     [Parameter(Mandatory)][string]$Label,
     [string]$Target,       # ISO 8601 datetime
     [int]$InMinutes,       # countdown N minutes from now
@@ -15,6 +17,9 @@ param(
     [string]$Server = "http://localhost:3000",
     [ValidateSet("show_zero","remove","pause")][string]$ZeroBehavior = "show_zero"
 )
+
+if (-not $Token) { $Token = $env:HERALD_ADMIN_TOKEN }
+if (-not $Token) { Write-Error "Provide -Token or set `$env:HERALD_ADMIN_TOKEN"; return }
 
 if (-not $Target -and -not $InMinutes -and -not $InHours) {
     Write-Error "Provide -Target (ISO datetime), -InMinutes, or -InHours"

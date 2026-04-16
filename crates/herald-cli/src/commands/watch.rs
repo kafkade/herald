@@ -12,16 +12,47 @@ use crate::ui::animation::BoardAnimation;
 use crate::ui::{BoardWidget, DisplayGrid, StatusBar};
 use crate::ws_client::WsClient;
 
-/// Default duration for each character step in the cycling animation.
-const STEP_DURATION: Duration = Duration::from_millis(50);
-
-/// Default cascade delay between columns.
-const STAGGER_PER_COLUMN: Duration = Duration::from_millis(20);
-
 /// Minimum tick interval during animation for smooth rendering.
 const ANIMATION_TICK: Duration = Duration::from_millis(20);
 
-pub async fn run(server: String, fps: u16) -> Result<(), Box<dyn std::error::Error>> {
+/// Animation speed presets for split-flap flip animation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum AnimationSpeed {
+    /// Fast: 25ms/step, 10ms stagger
+    Fast,
+    /// Normal: 50ms/step, 20ms stagger (default)
+    Normal,
+    /// Slow: 100ms/step, 40ms stagger
+    Slow,
+    /// Off: instant transitions, no animation
+    Off,
+}
+
+impl AnimationSpeed {
+    pub fn step_duration(&self) -> Duration {
+        match self {
+            Self::Fast => Duration::from_millis(25),
+            Self::Normal => Duration::from_millis(50),
+            Self::Slow => Duration::from_millis(100),
+            Self::Off => Duration::ZERO,
+        }
+    }
+
+    pub fn stagger_per_column(&self) -> Duration {
+        match self {
+            Self::Fast => Duration::from_millis(10),
+            Self::Normal => Duration::from_millis(20),
+            Self::Slow => Duration::from_millis(40),
+            Self::Off => Duration::ZERO,
+        }
+    }
+}
+
+pub async fn run(
+    server: String,
+    fps: u16,
+    speed: AnimationSpeed,
+) -> Result<(), Box<dyn std::error::Error>> {
     let (client, mut board_rx, mut conn_rx, mut queue_rx) = WsClient::new(server.clone());
 
     tokio::spawn(async move {
@@ -40,6 +71,7 @@ pub async fn run(server: String, fps: u16) -> Result<(), Box<dyn std::error::Err
         &mut queue_rx,
         &server,
         fps,
+        speed,
     )
     .await;
 
@@ -58,13 +90,17 @@ async fn run_tui(
     queue_rx: &mut tokio::sync::watch::Receiver<crate::ws_client::QueueInfoState>,
     server_url: &str,
     fps: u16,
+    speed: AnimationSpeed,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let normal_tick = Duration::from_millis(1000 / fps.max(1) as u64);
     let mut last_update: Option<Instant> = None;
 
-    // Animation state
+    // Animation state — pre-allocate the display buffer once and reuse it
     let mut current_display = DisplayGrid::from_board_state(&board_rx.borrow());
     let mut animation: Option<BoardAnimation> = None;
+
+    // Frame skip: track when we last rendered to avoid catching up
+    let mut last_frame_time = Instant::now();
 
     let draw = |frame: &mut ratatui::Frame,
                 display: &DisplayGrid,
@@ -112,30 +148,37 @@ async fn run_tui(
                 last_update = Some(Instant::now());
                 let new_board = board_rx.borrow().clone();
 
-                // Start animation from the currently visible display state
-                let from_display = if let Some(ref anim) = animation {
-                    anim.sample(Instant::now())
+                if speed == AnimationSpeed::Off {
+                    // Instant transition — skip animation entirely
+                    animation = None;
+                    current_display.fill_from_board_state(&new_board);
                 } else {
-                    current_display.clone()
-                };
+                    // Start animation from the currently visible display state
+                    if let Some(ref anim) = animation {
+                        // Reuse current_display buffer for the mid-animation snapshot
+                        anim.sample_into(Instant::now(), &mut current_display);
+                    }
 
-                let new_anim = BoardAnimation::new(
-                    &from_display,
-                    &new_board,
-                    STEP_DURATION,
-                    STAGGER_PER_COLUMN,
-                );
+                    let new_anim = BoardAnimation::new(
+                        &current_display,
+                        &new_board,
+                        speed.step_duration(),
+                        speed.stagger_per_column(),
+                    );
 
-                if new_anim.has_changes() {
-                    animation = Some(new_anim);
+                    if new_anim.has_changes() {
+                        animation = Some(new_anim);
 
-                    // Render immediately with the new animation's first frame
-                    let now = Instant::now();
-                    current_display = animation.as_ref().unwrap().sample(now);
-                } else {
-                    // No changes — update display directly, skip animation
-                    current_display = DisplayGrid::from_board_state(&new_board);
+                        // Render immediately with the new animation's first frame
+                        let now = Instant::now();
+                        animation.as_ref().unwrap().sample_into(now, &mut current_display);
+                    } else {
+                        // No changes — update display directly, skip animation
+                        current_display.fill_from_board_state(&new_board);
+                    }
                 }
+
+                last_frame_time = Instant::now();
 
                 let conn_state = conn_rx.borrow().clone();
                 let queue_info = queue_rx.borrow().clone();
@@ -161,7 +204,14 @@ async fn run_tui(
                 // Advance animation if active
                 if let Some(ref anim) = animation {
                     let now = Instant::now();
-                    current_display = anim.sample(now);
+                    let elapsed_since_last_frame = now.duration_since(last_frame_time);
+
+                    if elapsed_since_last_frame >= tick_duration {
+                        // Frame skip: if more than 3 ticks behind we still just
+                        // sample the latest state (no intermediate catch-up).
+                        anim.sample_into(now, &mut current_display);
+                        last_frame_time = now;
+                    }
 
                     if anim.is_complete(now) {
                         // Animation finished — settle on the final target state
@@ -191,7 +241,7 @@ async fn run_tui(
                         Event::Resize(_width, _height) => {
                             // Cancel any in-progress animation and snap to target
                             if let Some(ref anim) = animation {
-                                current_display = DisplayGrid::from_board_state(anim.target());
+                                current_display.fill_from_board_state(anim.target());
                                 animation = None;
                             }
                             // Re-draw immediately with the new terminal size

@@ -37,7 +37,7 @@ pub fn cycling_steps(from: char, to: char) -> Vec<char> {
     };
 
     let len = CHAR_SET.len();
-    let mut steps = Vec::new();
+    let mut steps = Vec::with_capacity(CHAR_SET.len());
     let mut i = (from_idx + 1) % len;
     loop {
         steps.push(CHAR_SET[i]);
@@ -150,6 +150,7 @@ impl BoardAnimation {
     }
 
     /// Sample the animation at a given instant, producing the current `DisplayGrid`.
+    #[allow(dead_code)] // Kept for backward compatibility; tests use this method
     pub fn sample(&self, now: Instant) -> DisplayGrid {
         let mut grid_cells = Vec::with_capacity(BOARD_ROWS);
 
@@ -203,6 +204,37 @@ impl BoardAnimation {
     /// Get the target board state this animation is transitioning to.
     pub fn target(&self) -> &BoardState {
         &self.target
+    }
+
+    /// Sample the animation at a given instant, writing into an existing `DisplayGrid`
+    /// to avoid per-frame allocation.
+    pub fn sample_into(&self, now: Instant, display: &mut DisplayGrid) {
+        for row in 0..BOARD_ROWS {
+            for col in 0..BOARD_COLS {
+                let state = match &self.cells[row][col] {
+                    None => CellDisplayState::Normal(self.target.grid.0[row][col]),
+                    Some(anim) => {
+                        let effective_start = anim.created_at + anim.delay;
+                        if now < effective_start {
+                            cell_display_for_char(anim.from_char)
+                        } else if anim.steps.is_empty() {
+                            CellDisplayState::Normal(anim.target)
+                        } else {
+                            let elapsed = now.duration_since(effective_start);
+                            let step_idx =
+                                (elapsed.as_nanos() / self.step_duration.as_nanos()) as usize;
+
+                            if step_idx >= anim.steps.len() - 1 {
+                                CellDisplayState::Normal(anim.target)
+                            } else {
+                                CellDisplayState::Flipping(anim.steps[step_idx])
+                            }
+                        }
+                    }
+                };
+                display.set(row, col, state);
+            }
+        }
     }
 
     /// Returns `true` when all cells have finished their animation.
@@ -540,5 +572,51 @@ mod tests {
             Duration::from_millis(20),
         );
         assert!(anim.has_changes());
+    }
+
+    #[test]
+    fn test_sample_into_matches_sample() {
+        let display = make_blank_display();
+        let target = make_board_with_char('D');
+        let anim = BoardAnimation::new(
+            &display,
+            &target,
+            Duration::from_millis(50),
+            Duration::from_millis(20),
+        );
+
+        // Sample at several time points and verify sample_into gives the same result
+        for offset_ms in [0, 25, 75, 150, 500] {
+            let t = anim.created_at + Duration::from_millis(offset_ms);
+            let from_sample = anim.sample(t);
+            let mut into_buf = make_blank_display();
+            anim.sample_into(t, &mut into_buf);
+
+            for r in 0..BOARD_ROWS {
+                for c in 0..BOARD_COLS {
+                    assert_eq!(
+                        format!("{:?}", from_sample.cells[r][c]),
+                        format!("{:?}", into_buf.cells[r][c]),
+                        "mismatch at ({r},{c}) t={offset_ms}ms"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_fill_from_board_state_reuses_allocation() {
+        let mut display = make_blank_display();
+        let ptr_before = display.cells.as_ptr();
+
+        let target = make_board_with_char('Z');
+        display.fill_from_board_state(&target);
+
+        // Vec should not have reallocated
+        assert_eq!(display.cells.as_ptr(), ptr_before);
+        match &display.cells[0][0] {
+            CellDisplayState::Normal(CellContent::Char('Z')) => {}
+            other => panic!("Expected Normal(Char('Z')), got {other:?}"),
+        }
     }
 }

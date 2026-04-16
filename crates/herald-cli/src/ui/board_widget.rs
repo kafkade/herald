@@ -13,8 +13,22 @@ const CELL_WIDTH: u16 = 3;
 const GRID_WIDTH: u16 = BOARD_COLS as u16 * CELL_WIDTH + BOARD_COLS as u16 + 1; // 89
 const GRID_HEIGHT: u16 = BOARD_ROWS as u16 + BOARD_ROWS as u16 + 1; // 13
 
-/// Maps a Herald color to a ratatui terminal color.
-fn map_color(color: &Color) -> RatatuiColor {
+/// Maps a Herald color to an ANSI 256-color indexed value.
+fn map_color_256(color: &Color) -> RatatuiColor {
+    match color {
+        Color::Red => RatatuiColor::Indexed(196),
+        Color::Orange => RatatuiColor::Indexed(208),
+        Color::Yellow => RatatuiColor::Indexed(226),
+        Color::Green => RatatuiColor::Indexed(46),
+        Color::Blue => RatatuiColor::Indexed(21),
+        Color::Violet => RatatuiColor::Indexed(93),
+        Color::White => RatatuiColor::Indexed(231),
+        Color::Black => RatatuiColor::Indexed(232),
+    }
+}
+
+/// Basic 8-color fallback for terminals without 256-color support.
+fn map_color_basic(color: &Color) -> RatatuiColor {
     match color {
         Color::Red => RatatuiColor::Red,
         Color::Orange => RatatuiColor::Rgb(255, 165, 0),
@@ -25,6 +39,29 @@ fn map_color(color: &Color) -> RatatuiColor {
         Color::White => RatatuiColor::White,
         Color::Black => RatatuiColor::Black,
     }
+}
+
+/// Maps a Herald color to a terminal color, with fallback for basic terminals.
+fn map_color_with_fallback(color: &Color, use_256: bool) -> RatatuiColor {
+    if use_256 {
+        map_color_256(color)
+    } else {
+        map_color_basic(color)
+    }
+}
+
+/// Detects whether the terminal supports 256 colors via environment variables.
+fn supports_256_colors() -> bool {
+    if let Ok(colorterm) = std::env::var("COLORTERM")
+        && (colorterm == "truecolor" || colorterm == "24bit")
+    {
+        return true;
+    }
+    if let Ok(term) = std::env::var("TERM") {
+        return term.contains("256color") || term.contains("xterm") || term.contains("screen");
+    }
+    // Default to 256 on modern systems
+    true
 }
 
 /// A ratatui widget that renders the Herald 6×22 board grid with box-drawing borders.
@@ -122,7 +159,17 @@ impl<'a> Widget for BoardWidget<'a> {
                             }
                         }
                         CellContent::Color(color) => {
-                            let style = Style::default().bg(map_color(color));
+                            let use_256 = supports_256_colors();
+                            let bg = map_color_with_fallback(color, use_256);
+                            let style = match color {
+                                Color::White => {
+                                    Style::default().bg(bg).fg(RatatuiColor::Indexed(232))
+                                }
+                                Color::Black => {
+                                    Style::default().bg(bg).fg(RatatuiColor::Indexed(231))
+                                }
+                                _ => Style::default().bg(bg),
+                            };
                             for dx in 0..CELL_WIDTH {
                                 if let Some(cell) = buf.cell_mut(Position::new(x_start + dx, y)) {
                                     cell.set_char(' ').set_style(style);
@@ -239,7 +286,36 @@ mod tests {
         widget.render(area, &mut buf);
 
         let cell = buf.cell(Position::new(1, 1)).unwrap();
-        assert_eq!(cell.bg, RatatuiColor::Red);
+        // With 256-color support (default), Red maps to Indexed(196)
+        assert_eq!(cell.bg, RatatuiColor::Indexed(196));
+    }
+
+    #[test]
+    fn renders_white_color_cell_with_dark_foreground() {
+        let mut dg = blank_display();
+        dg.cells[0][0] = CellDisplayState::Normal(CellContent::Color(Color::White));
+        let widget = BoardWidget::new(&dg);
+        let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
+        let mut buf = Buffer::empty(area);
+        widget.render(area, &mut buf);
+
+        let cell = buf.cell(Position::new(1, 1)).unwrap();
+        assert_eq!(cell.bg, RatatuiColor::Indexed(231));
+        assert_eq!(cell.fg, RatatuiColor::Indexed(232));
+    }
+
+    #[test]
+    fn renders_black_color_cell_with_white_foreground() {
+        let mut dg = blank_display();
+        dg.cells[0][0] = CellDisplayState::Normal(CellContent::Color(Color::Black));
+        let widget = BoardWidget::new(&dg);
+        let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
+        let mut buf = Buffer::empty(area);
+        widget.render(area, &mut buf);
+
+        let cell = buf.cell(Position::new(1, 1)).unwrap();
+        assert_eq!(cell.bg, RatatuiColor::Indexed(232));
+        assert_eq!(cell.fg, RatatuiColor::Indexed(231));
     }
 
     #[test]
