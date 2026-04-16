@@ -22,3 +22,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI WebSocket client with automatic reconnection and exponential backoff (1s–30s)
 - `--server` option on `herald watch` to specify the WebSocket server URL
 - Terminal board viewer (`herald watch`) with live-updating 6×22 grid, color tile rendering, and centered viewport
+- Connection status bar showing state (Connected/Connecting/Reconnecting/Disconnected), server URL, and time since last update
+- `--fps` option on `herald watch` to control UI refresh rate (default 30)

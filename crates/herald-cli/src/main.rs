@@ -21,6 +21,9 @@ enum Command {
         /// WebSocket server URL
         #[arg(long, default_value = "ws://localhost:3000/ws")]
         server: String,
+        /// Target frames per second for the UI refresh rate
+        #[arg(long, default_value_t = 30)]
+        fps: u16,
     },
     /// Push a message to the board
     Push,
@@ -37,7 +40,7 @@ async fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Command::Watch { server } => commands::watch::run(server).await,
+        Command::Watch { server, fps } => commands::watch::run(server, fps).await,
         Command::Serve => {
             eprintln!("serve is not yet implemented");
             Ok(())
