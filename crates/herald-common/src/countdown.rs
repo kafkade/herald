@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::{CellContent, Countdown, Grid, BOARD_COLS, BOARD_ROWS};
+use crate::{BOARD_COLS, BOARD_ROWS, CellContent, Countdown, Grid};
 
 /// Render a countdown onto the 6×22 board grid.
 ///
@@ -188,8 +188,16 @@ mod tests {
         let grid = render_countdown_grid(&cd, now);
 
         for col in 0..BOARD_COLS {
-            assert_eq!(grid.0[2][col], CellContent::Blank, "row 2, col {col} not blank");
-            assert_eq!(grid.0[5][col], CellContent::Blank, "row 5, col {col} not blank");
+            assert_eq!(
+                grid.0[2][col],
+                CellContent::Blank,
+                "row 2, col {col} not blank"
+            );
+            assert_eq!(
+                grid.0[5][col],
+                CellContent::Blank,
+                "row 5, col {col} not blank"
+            );
         }
     }
 

@@ -25,3 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Connection status bar showing state (Connected/Connecting/Reconnecting/Disconnected), server URL, and time since last update
 - `--fps` option on `herald watch` to control UI refresh rate (default 30)
 - Server-side WebSocket ping/pong heartbeat (30s interval, 10s timeout) to detect and close stale connections
+- Background queue rotation task with configurable interval (`rotation_interval_secs` in config)
+- Automatic expired message cleanup during rotation (per spec §5.7)
+- Countdown timer rendering on the board grid with label, formatted time remaining, and template placeholders

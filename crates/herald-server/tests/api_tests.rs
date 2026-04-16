@@ -1346,7 +1346,9 @@ async fn countdown_renders_on_board_state() {
     assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
 
     // Build the board state — should have the countdown rendered (not blank)
-    let board_state = herald_server::db::build_board_state(state.pool()).await.unwrap();
+    let board_state = herald_server::db::build_board_state(state.pool())
+        .await
+        .unwrap();
 
     // current_item should be the countdown
     let item = board_state.current_item.unwrap();
@@ -1355,9 +1357,13 @@ async fn countdown_renders_on_board_state() {
 
     // Grid should NOT be entirely blank (countdown renders label + time)
     let has_content = board_state.grid.0.iter().any(|row| {
-        row.iter().any(|cell| *cell != herald_common::CellContent::Blank)
+        row.iter()
+            .any(|cell| *cell != herald_common::CellContent::Blank)
     });
-    assert!(has_content, "countdown grid should have rendered content, not be blank");
+    assert!(
+        has_content,
+        "countdown grid should have rendered content, not be blank"
+    );
 
     // Row 0 should contain the label "LAUNCH"
     let row0_chars: String = board_state.grid.0[0]
@@ -1367,7 +1373,10 @@ async fn countdown_renders_on_board_state() {
             _ => None,
         })
         .collect();
-    assert!(row0_chars.contains("LAUNCH"), "row 0 should contain the label LAUNCH, got: {row0_chars}");
+    assert!(
+        row0_chars.contains("LAUNCH"),
+        "row 0 should contain the label LAUNCH, got: {row0_chars}"
+    );
 
     // Row 3 should contain time digits (at least "00" from hours/minutes/seconds)
     let row3_chars: String = board_state.grid.0[3]
@@ -1377,12 +1386,21 @@ async fn countdown_renders_on_board_state() {
             _ => None,
         })
         .collect();
-    assert!(!row3_chars.is_empty(), "row 3 should contain formatted time");
+    assert!(
+        !row3_chars.is_empty(),
+        "row 3 should contain formatted time"
+    );
 
     // Rows 2 and 5 should be blank (separator rows)
     for col in 0..herald_common::BOARD_COLS {
-        assert_eq!(board_state.grid.0[2][col], herald_common::CellContent::Blank);
-        assert_eq!(board_state.grid.0[5][col], herald_common::CellContent::Blank);
+        assert_eq!(
+            board_state.grid.0[2][col],
+            herald_common::CellContent::Blank
+        );
+        assert_eq!(
+            board_state.grid.0[5][col],
+            herald_common::CellContent::Blank
+        );
     }
 
     cleanup(&db_path);
