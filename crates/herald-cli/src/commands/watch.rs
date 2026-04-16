@@ -119,16 +119,24 @@ async fn run_tui(
                     current_display.clone()
                 };
 
-                animation = Some(BoardAnimation::new(
+                let new_anim = BoardAnimation::new(
                     &from_display,
                     &new_board,
                     STEP_DURATION,
                     STAGGER_PER_COLUMN,
-                ));
+                );
 
-                // Render immediately with the new animation's first frame
-                let now = Instant::now();
-                current_display = animation.as_ref().unwrap().sample(now);
+                if new_anim.has_changes() {
+                    animation = Some(new_anim);
+
+                    // Render immediately with the new animation's first frame
+                    let now = Instant::now();
+                    current_display = animation.as_ref().unwrap().sample(now);
+                } else {
+                    // No changes — update display directly, skip animation
+                    current_display = DisplayGrid::from_board_state(&new_board);
+                }
+
                 let conn_state = conn_rx.borrow().clone();
                 let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
@@ -167,7 +175,7 @@ async fn run_tui(
                     draw(frame, &current_display, &conn_state, &queue_info, server_url, last_update);
                 })?;
 
-                if event::poll(Duration::from_millis(0))? {
+                while event::poll(Duration::from_millis(0))? {
                     match event::read()? {
                         Event::Key(key) if key.kind == KeyEventKind::Press => {
                             match key.code {
@@ -179,6 +187,19 @@ async fn run_tui(
                                 }
                                 _ => {}
                             }
+                        }
+                        Event::Resize(_width, _height) => {
+                            // Cancel any in-progress animation and snap to target
+                            if let Some(ref anim) = animation {
+                                current_display = DisplayGrid::from_board_state(anim.target());
+                                animation = None;
+                            }
+                            // Re-draw immediately with the new terminal size
+                            let conn_state = conn_rx.borrow().clone();
+                            let queue_info = queue_rx.borrow().clone();
+                            terminal.draw(|frame| {
+                                draw(frame, &current_display, &conn_state, &queue_info, server_url, last_update);
+                            })?;
                         }
                         _ => {}
                     }

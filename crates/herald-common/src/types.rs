@@ -213,6 +213,24 @@ impl Grid {
 
         Ok(grid)
     }
+
+    /// Compare two grids and return the (row, col) positions of cells that differ.
+    pub fn diff_grids(old: &Grid, new: &Grid) -> Vec<(usize, usize)> {
+        let mut diffs = Vec::new();
+        for (row_idx, (old_row, new_row)) in old.0.iter().zip(new.0.iter()).enumerate() {
+            for (col_idx, (old_cell, new_cell)) in old_row.iter().zip(new_row.iter()).enumerate() {
+                if old_cell != new_cell {
+                    diffs.push((row_idx, col_idx));
+                }
+            }
+        }
+        diffs
+    }
+
+    /// Returns true if the two grids are identical (no cells differ).
+    pub fn grids_are_identical(old: &Grid, new: &Grid) -> bool {
+        Grid::diff_grids(old, new).is_empty()
+    }
 }
 
 impl Default for Grid {

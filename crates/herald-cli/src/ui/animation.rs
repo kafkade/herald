@@ -195,6 +195,16 @@ impl BoardAnimation {
         DisplayGrid { cells: grid_cells }
     }
 
+    /// Returns true if there are any animated cells (boards were not identical).
+    pub fn has_changes(&self) -> bool {
+        self.cells.iter().any(|row| row.iter().any(|c| c.is_some()))
+    }
+
+    /// Get the target board state this animation is transitioning to.
+    pub fn target(&self) -> &BoardState {
+        &self.target
+    }
+
     /// Returns `true` when all cells have finished their animation.
     pub fn is_complete(&self, now: Instant) -> bool {
         for row in &self.cells {
@@ -503,5 +513,32 @@ mod tests {
         // 'B' → 'A' forward-cycling should go: C, D, E, ..., Z, 0-9, punctuation, ' ', A
         assert_eq!(*cell_anim.steps.last().unwrap(), 'A');
         assert!(cell_anim.steps.len() > 2); // definitely wraps around
+    }
+
+    #[test]
+    fn test_has_changes_when_no_changes() {
+        let display = make_blank_display();
+        let mut target = BoardState::default();
+        target.grid = Grid::blank();
+        let anim = BoardAnimation::new(
+            &display,
+            &target,
+            Duration::from_millis(50),
+            Duration::from_millis(20),
+        );
+        assert!(!anim.has_changes());
+    }
+
+    #[test]
+    fn test_has_changes_when_changed() {
+        let display = make_blank_display();
+        let target = make_board_with_char('A');
+        let anim = BoardAnimation::new(
+            &display,
+            &target,
+            Duration::from_millis(50),
+            Duration::from_millis(20),
+        );
+        assert!(anim.has_changes());
     }
 }
