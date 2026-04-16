@@ -1,4 +1,5 @@
 mod commands;
+mod ws_client;
 
 use clap::{Parser, Subcommand};
 
@@ -15,7 +16,11 @@ enum Command {
     /// Start the Herald server
     Serve,
     /// Watch the board in your terminal
-    Watch,
+    Watch {
+        /// WebSocket server URL
+        #[arg(long, default_value = "ws://localhost:3000/ws")]
+        server: String,
+    },
     /// Push a message to the board
     Push,
     /// Manage countdowns
@@ -31,7 +36,7 @@ async fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Command::Watch => commands::watch::run().await,
+        Command::Watch { server } => commands::watch::run(server).await,
         Command::Serve => {
             eprintln!("serve is not yet implemented");
             Ok(())
