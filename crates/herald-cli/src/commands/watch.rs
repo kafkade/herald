@@ -2,8 +2,7 @@ use std::io;
 use std::time::{Duration, Instant};
 
 use crossterm::{
-    ExecutableCommand,
-    cursor,
+    ExecutableCommand, cursor,
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -50,14 +49,13 @@ async fn run_tui(
                 server_url: &str,
                 last_update: Option<Instant>| {
         let area = frame.area();
-        let chunks = Layout::vertical([
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .split(area);
+        let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
         frame.render_widget(BoardWidget::new(board_state), chunks[0]);
-        frame.render_widget(StatusBar::new(conn_state, server_url, last_update), chunks[1]);
+        frame.render_widget(
+            StatusBar::new(conn_state, server_url, last_update),
+            chunks[1],
+        );
     };
 
     // Initial draw
