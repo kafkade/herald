@@ -2,14 +2,19 @@
 .SYNOPSIS
     Update the rotation interval (seconds between board transitions).
 .EXAMPLE
-    .\set-rotation-interval.ps1 -Token "mytoken" -Seconds 15
-    .\set-rotation-interval.ps1 -Token "mytoken" -Seconds 60
+    .\set-rotation-interval.ps1 -Seconds 15
+    .\set-rotation-interval.ps1 -Seconds 60
+.NOTES
+    Uses $env:HERALD_ADMIN_TOKEN if -Token is not provided.
 #>
 param(
-    [Parameter(Mandatory)][string]$Token,
+    [string]$Token,
     [Parameter(Mandatory)][int]$Seconds,
     [string]$Server = "http://localhost:3000"
 )
+
+if (-not $Token) { $Token = $env:HERALD_ADMIN_TOKEN }
+if (-not $Token) { Write-Error "Provide -Token or set `$env:HERALD_ADMIN_TOKEN"; return }
 
 if ($Seconds -lt 1) {
     Write-Error "Interval must be at least 1 second."

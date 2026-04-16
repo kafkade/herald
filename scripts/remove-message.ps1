@@ -2,15 +2,21 @@
 .SYNOPSIS
     Remove a message from the Herald board rotation.
 .EXAMPLE
-    .\remove-message.ps1 -Token "mytoken" -Id "some-uuid"
-    .\remove-message.ps1 -Token "mytoken" -All   # remove all messages
+    .\remove-message.ps1 -Id "some-uuid"
+    .\remove-message.ps1 -All
+    .\remove-message.ps1          # lists messages to choose from
+.NOTES
+    Uses $env:HERALD_ADMIN_TOKEN if -Token is not provided.
 #>
 param(
-    [Parameter(Mandatory)][string]$Token,
+    [string]$Token,
     [string]$Id,
     [switch]$All,
     [string]$Server = "http://localhost:3000"
 )
+
+if (-not $Token) { $Token = $env:HERALD_ADMIN_TOKEN }
+if (-not $Token) { Write-Error "Provide -Token or set `$env:HERALD_ADMIN_TOKEN"; return }
 
 if (-not $Id -and -not $All) {
     # List messages so the user can pick one
