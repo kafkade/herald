@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 
 use herald_common::{Grid, ServerMessage};
@@ -20,6 +20,7 @@ struct InnerState {
     pub started_at: Instant,
     pub broadcast_tx: broadcast::Sender<ServerMessage>,
     pub viewer_count: AtomicUsize,
+    pub next_client_id: AtomicU64,
     /// Guards the build-board-state → broadcast path so concurrent mutations
     /// cannot interleave and produce out-of-order previous_grid values.
     pub notify_lock: Mutex<Grid>,
@@ -35,6 +36,7 @@ impl AppState {
                 started_at: Instant::now(),
                 broadcast_tx,
                 viewer_count: AtomicUsize::new(0),
+                next_client_id: AtomicU64::new(1),
                 notify_lock: Mutex::new(Grid::blank()),
             }),
         }
@@ -75,6 +77,11 @@ impl AppState {
     /// Get the current viewer count.
     pub fn viewer_count(&self) -> usize {
         self.inner.viewer_count.load(Ordering::Relaxed)
+    }
+
+    /// Generate a unique client identifier for logging.
+    pub fn next_client_id(&self) -> u64 {
+        self.inner.next_client_id.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Build the current board state from the database and broadcast it to all connected viewers.
