@@ -8,6 +8,15 @@ use tokio_tungstenite::tungstenite::Message;
 const INITIAL_BACKOFF_SECS: u64 = 1;
 const MAX_BACKOFF_SECS: u64 = 30;
 
+/// Rotation metadata for the status bar.
+#[derive(Clone, Debug, Default)]
+pub struct QueueInfoState {
+    pub current_index: usize,
+    pub total_items: usize,
+    pub next_rotation_seconds: u32,
+    pub is_countdown_active: bool,
+}
+
 /// Connection state visible to the UI layer.
 #[derive(Clone, Debug)]
 pub enum ConnectionState {
@@ -25,6 +34,7 @@ pub struct WsClient {
     server_url: String,
     board_tx: watch::Sender<BoardState>,
     conn_tx: watch::Sender<ConnectionState>,
+    queue_tx: watch::Sender<QueueInfoState>,
 }
 
 impl WsClient {
@@ -36,15 +46,18 @@ impl WsClient {
         Self,
         watch::Receiver<BoardState>,
         watch::Receiver<ConnectionState>,
+        watch::Receiver<QueueInfoState>,
     ) {
         let (board_tx, board_rx) = watch::channel(BoardState::default());
         let (conn_tx, conn_rx) = watch::channel(ConnectionState::Connecting);
+        let (queue_tx, queue_rx) = watch::channel(QueueInfoState::default());
         let client = Self {
             server_url,
             board_tx,
             conn_tx,
+            queue_tx,
         };
-        (client, board_rx, conn_rx)
+        (client, board_rx, conn_rx, queue_rx)
     }
 
     /// Run the connection loop. Connects to the server, receives messages,
@@ -91,6 +104,19 @@ impl WsClient {
                                             );
                                             return;
                                         }
+                                    }
+                                    Ok(ServerMessage::QueueInfo {
+                                        current_index,
+                                        total_items,
+                                        next_rotation_seconds,
+                                        is_countdown_active,
+                                    }) => {
+                                        let _ = self.queue_tx.send(QueueInfoState {
+                                            current_index,
+                                            total_items,
+                                            next_rotation_seconds,
+                                            is_countdown_active,
+                                        });
                                     }
                                     Ok(_other) => {
                                         tracing::trace!("Received non-board message, skipping");

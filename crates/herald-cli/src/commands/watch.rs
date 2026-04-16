@@ -12,7 +12,7 @@ use crate::ui::{BoardWidget, StatusBar};
 use crate::ws_client::WsClient;
 
 pub async fn run(server: String, fps: u16) -> Result<(), Box<dyn std::error::Error>> {
-    let (client, mut board_rx, mut conn_rx) = WsClient::new(server.clone());
+    let (client, mut board_rx, mut conn_rx, mut queue_rx) = WsClient::new(server.clone());
 
     tokio::spawn(async move {
         client.run().await;
@@ -23,7 +23,15 @@ pub async fn run(server: String, fps: u16) -> Result<(), Box<dyn std::error::Err
     io::stdout().execute(cursor::Hide)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
 
-    let result = run_tui(&mut terminal, &mut board_rx, &mut conn_rx, &server, fps).await;
+    let result = run_tui(
+        &mut terminal,
+        &mut board_rx,
+        &mut conn_rx,
+        &mut queue_rx,
+        &server,
+        fps,
+    )
+    .await;
 
     // Restore terminal — always runs even on error
     disable_raw_mode()?;
@@ -37,6 +45,7 @@ async fn run_tui(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     board_rx: &mut tokio::sync::watch::Receiver<herald_common::BoardState>,
     conn_rx: &mut tokio::sync::watch::Receiver<crate::ws_client::ConnectionState>,
+    queue_rx: &mut tokio::sync::watch::Receiver<crate::ws_client::QueueInfoState>,
     server_url: &str,
     fps: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -46,6 +55,7 @@ async fn run_tui(
     let draw = |frame: &mut ratatui::Frame,
                 board_state: &herald_common::BoardState,
                 conn_state: &crate::ws_client::ConnectionState,
+                queue_info: &crate::ws_client::QueueInfoState,
                 server_url: &str,
                 last_update: Option<Instant>| {
         let area = frame.area();
@@ -53,7 +63,7 @@ async fn run_tui(
 
         frame.render_widget(BoardWidget::new(board_state), chunks[0]);
         frame.render_widget(
-            StatusBar::new(conn_state, server_url, last_update),
+            StatusBar::new(conn_state, server_url, last_update, queue_info),
             chunks[1],
         );
     };
@@ -61,8 +71,16 @@ async fn run_tui(
     // Initial draw
     let board_state = board_rx.borrow().clone();
     let conn_state = conn_rx.borrow().clone();
+    let queue_info = queue_rx.borrow().clone();
     terminal.draw(|frame| {
-        draw(frame, &board_state, &conn_state, server_url, last_update);
+        draw(
+            frame,
+            &board_state,
+            &conn_state,
+            &queue_info,
+            server_url,
+            last_update,
+        );
     })?;
 
     loop {
@@ -74,22 +92,33 @@ async fn run_tui(
                 last_update = Some(Instant::now());
                 let board_state = board_rx.borrow().clone();
                 let conn_state = conn_rx.borrow().clone();
+                let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
-                    draw(frame, &board_state, &conn_state, server_url, last_update);
+                    draw(frame, &board_state, &conn_state, &queue_info, server_url, last_update);
                 })?;
             }
             _ = conn_rx.changed() => {
                 let board_state = board_rx.borrow().clone();
                 let conn_state = conn_rx.borrow().clone();
+                let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
-                    draw(frame, &board_state, &conn_state, server_url, last_update);
+                    draw(frame, &board_state, &conn_state, &queue_info, server_url, last_update);
+                })?;
+            }
+            _ = queue_rx.changed() => {
+                let board_state = board_rx.borrow().clone();
+                let conn_state = conn_rx.borrow().clone();
+                let queue_info = queue_rx.borrow().clone();
+                terminal.draw(|frame| {
+                    draw(frame, &board_state, &conn_state, &queue_info, server_url, last_update);
                 })?;
             }
             _ = tokio::time::sleep(tick_duration) => {
                 let board_state = board_rx.borrow().clone();
                 let conn_state = conn_rx.borrow().clone();
+                let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
-                    draw(frame, &board_state, &conn_state, server_url, last_update);
+                    draw(frame, &board_state, &conn_state, &queue_info, server_url, last_update);
                 })?;
 
                 if event::poll(Duration::from_millis(0))? {

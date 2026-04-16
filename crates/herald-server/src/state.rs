@@ -99,14 +99,59 @@ impl AppState {
                 *last_grid = board_state.grid.clone();
                 drop(last_grid);
 
+                let is_countdown = board_state
+                    .current_item
+                    .as_ref()
+                    .map(|item| item.kind == herald_common::QueueItemKind::Countdown)
+                    .unwrap_or(false);
+
                 let _ = self
                     .inner
                     .broadcast_tx
                     .send(herald_common::ServerMessage::BoardUpdate(board_state));
+
+                // Send rotation metadata alongside the board update
+                match (
+                    crate::db::get_queue(self.pool()).await,
+                    crate::db::get_current_index(self.pool()).await,
+                    crate::db::get_rotation_interval(self.pool()).await,
+                ) {
+                    (Ok(queue), Ok(current_idx), Ok(interval)) => {
+                        let total = queue.len();
+                        let idx = if total > 0 {
+                            (current_idx as usize) % total
+                        } else {
+                            0
+                        };
+                        let _ =
+                            self.inner
+                                .broadcast_tx
+                                .send(herald_common::ServerMessage::QueueInfo {
+                                    current_index: idx,
+                                    total_items: total,
+                                    next_rotation_seconds: interval as u32,
+                                    is_countdown_active: is_countdown,
+                                });
+                    }
+                    _ => {
+                        tracing::warn!("Failed to build queue info for broadcast");
+                    }
+                }
             }
             Err(e) => {
-                drop(last_grid);
                 tracing::error!("Failed to build board state for broadcast: {e}");
+                // Broadcast the previous known-good state rather than nothing
+                let fallback = herald_common::BoardState {
+                    grid: last_grid.clone(),
+                    previous_grid: last_grid.clone(),
+                    current_item: None,
+                    timestamp: chrono::Utc::now(),
+                };
+                drop(last_grid);
+                let _ = self
+                    .inner
+                    .broadcast_tx
+                    .send(herald_common::ServerMessage::BoardUpdate(fallback));
             }
         }
     }

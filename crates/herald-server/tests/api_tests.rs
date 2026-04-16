@@ -831,7 +831,8 @@ async fn ws_broadcast_on_message_delete() {
     let msg: serde_json::Value = resp.json().await.unwrap();
     let msg_id = msg["id"].as_str().unwrap().to_string();
 
-    // Drain the create broadcast
+    // Drain the create broadcast (BoardUpdate + QueueInfo)
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next()).await;
     let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next()).await;
 
     // Delete the message

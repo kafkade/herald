@@ -175,7 +175,7 @@ pub struct BoardState {
 impl Default for BoardState {
     fn default() -> Self {
         Self {
-            grid: Grid::blank(),
+            grid: crate::splash_grid(),
             previous_grid: Grid::blank(),
             current_item: None,
             timestamp: Utc::now(),
