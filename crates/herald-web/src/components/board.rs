@@ -19,6 +19,7 @@ pub fn Board(ws_state: WebSocketState) -> impl IntoView {
                             prev_cell=ws.previous_grid[row][col]
                             col_index=col
                             update_counter=ws.update_counter
+                            has_received_update=ws.has_received_update
                         />
                     }
                 }).collect_view()

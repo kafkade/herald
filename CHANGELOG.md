@@ -61,11 +61,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Responsive board layout with mobile horizontal scroll and large-screen centering
 - Loading shimmer animation for tiles before WebSocket connection is established
 - Fine-grained reactive signals (one per cell) for optimal re-render performance — only changed cells update
+- Responsive board scaling: tiles auto-size to fit the viewport at any screen width (375px–1440px+) without scrolling
+- Loading state with gradient shimmer animation while the WebSocket connection is being established
+- Flip animation on initial connect: all tiles animate from blank to their first board state with cascade stagger
+- Connection status indicator (bottom-right pill): green when connected (auto-hides after 3s), yellow while connecting, red when reconnecting
+- Static web asset serving from `herald-server` via `HERALD_WEB_DIR` env var (default `./web-dist`), with SPA fallback routing
+- `build-web.ps1` script to compile `herald-web` with Trunk and copy output to `web-dist/`
 
 ### Changed
 
 - Optimized animation rendering: pre-allocated display buffers and frame-skip logic for smooth 30fps playback
 - Color tiles now animate with a split-flap color cycling effect on board transitions, flipping through intermediate colors (e.g., Red → Orange → Yellow → Green → Blue) instead of snapping instantly
+- Web board now scales responsively to always fit the viewport without scrolling (replaced mobile horizontal scroll with viewport-based tile sizing)
+- Web loading state now uses a gradient shimmer sweep and triggers flip animation on all tiles when the first board update arrives
+- Web connection status indicator repositioned to a fixed bottom-right pill that auto-hides 3 seconds after connecting
 
 ### Fixed
 

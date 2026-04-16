@@ -39,6 +39,7 @@ pub fn FlapTile(
     prev_cell: RwSignal<CellContent>,
     col_index: usize,
     update_counter: RwSignal<u64>,
+    has_received_update: RwSignal<bool>,
 ) -> impl IntoView {
     let is_animating = RwSignal::new(false);
 
@@ -46,6 +47,7 @@ pub fn FlapTile(
     Effect::new(move |prev_count: Option<u64>| {
         let count = update_counter.get();
         if prev_count.is_some() {
+            // Subsequent updates: only animate changed cells
             let current = cell.get();
             let previous = prev_cell.get();
             if current != previous {
@@ -56,6 +58,14 @@ pub fn FlapTile(
                     std::time::Duration::from_millis(delay_ms as u64),
                 );
             }
+        } else if has_received_update.get() {
+            // First update: animate all tiles from loading state
+            is_animating.set(true);
+            let delay_ms = (col_index as u32) * 20 + 350;
+            set_timeout(
+                move || is_animating.set(false),
+                std::time::Duration::from_millis(delay_ms as u64),
+            );
         }
         count
     });
@@ -68,6 +78,9 @@ pub fn FlapTile(
             if is_light_color(color) {
                 classes.push("flap-tile--light");
             }
+        }
+        if !has_received_update.get() {
+            classes.push("flap-tile--loading");
         }
         if !is_animating.get() {
             classes.push("flap-tile--idle");
