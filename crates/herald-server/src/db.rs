@@ -36,11 +36,12 @@ pub async fn create_message(pool: &SqlitePool, msg: &Message) -> Result<(), sqlx
     let expires = msg.expires_at.map(|d| d.to_rfc3339());
 
     sqlx::query(
-        "INSERT INTO messages (id, grid, h_align, v_align, queue_position, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, grid, source_text, h_align, v_align, queue_position, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&grid_json)
+    .bind(&msg.source_text)
     .bind(&h_align)
     .bind(&v_align)
     .bind(msg.queue_position)
@@ -73,14 +74,25 @@ pub async fn update_message(
     pool: &SqlitePool,
     id: &str,
     req: &UpdateMessageRequest,
+    resolved: Option<&crate::api::messages::ResolvedContent>,
 ) -> Result<bool, sqlx::Error> {
     // Build dynamic update
     let mut sets = Vec::new();
     let mut values: Vec<String> = Vec::new();
+    // Track which sets are null-valued for expires_at handling
+    let mut null_indices: Vec<usize> = Vec::new();
 
-    if let Some(ref grid) = req.grid {
+    if let Some(resolved) = resolved {
         sets.push("grid = ?");
-        values.push(serde_json::to_string(grid).unwrap());
+        values.push(serde_json::to_string(&resolved.grid).unwrap());
+        sets.push("source_text = ?");
+        match &resolved.source_text {
+            Some(t) => values.push(t.clone()),
+            None => {
+                null_indices.push(values.len());
+                values.push(String::new());
+            }
+        }
     }
     if let Some(ref h) = req.h_align {
         sets.push("h_align = ?");
@@ -96,10 +108,13 @@ pub async fn update_message(
     }
     if let Some(ref exp) = req.expires_at {
         sets.push("expires_at = ?");
-        values.push(match exp {
-            Some(d) => d.to_rfc3339(),
-            None => String::new(),
-        });
+        match exp {
+            Some(d) => values.push(d.to_rfc3339()),
+            None => {
+                null_indices.push(values.len());
+                values.push(String::new());
+            }
+        }
     }
 
     if sets.is_empty() {
@@ -109,9 +124,8 @@ pub async fn update_message(
     let sql = format!("UPDATE messages SET {} WHERE id = ?", sets.join(", "));
     let mut query = sqlx::query(&sql);
 
-    for val in &values {
-        // Handle the expires_at = null case
-        if val.is_empty() && sets.iter().any(|s| s.contains("expires_at")) {
+    for (i, val) in values.iter().enumerate() {
+        if null_indices.contains(&i) {
             query = query.bind(None::<String>);
         } else {
             query = query.bind(val);
@@ -134,6 +148,7 @@ pub async fn delete_message(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::E
 fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> Message {
     let id_str: String = row.get("id");
     let grid_json: String = row.get("grid");
+    let source_text: Option<String> = row.get("source_text");
     let h_align_str: String = row.get("h_align");
     let v_align_str: String = row.get("v_align");
     let created_str: String = row.get("created_at");
@@ -142,6 +157,7 @@ fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> Message {
     Message {
         id: uuid::Uuid::parse_str(&id_str).unwrap(),
         grid: serde_json::from_str(&grid_json).unwrap(),
+        source_text,
         h_align: serde_json::from_str(&format!("\"{h_align_str}\"")).unwrap(),
         v_align: serde_json::from_str(&format!("\"{v_align_str}\"")).unwrap(),
         queue_position: row.get("queue_position"),

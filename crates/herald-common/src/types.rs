@@ -81,6 +81,138 @@ impl Grid {
         }
         Ok(())
     }
+
+    /// Normalize a character to the split-flap character set.
+    /// Returns `None` for unsupported characters (rendered as blank).
+    fn normalize_char(ch: char) -> Option<char> {
+        let upper = ch.to_uppercase().next().unwrap_or(ch);
+        match upper {
+            'A'..='Z' | '0'..='9' | ' ' => Some(upper),
+            '!' | '@' | '#' | '$' | '%' | '&' | '(' | ')' | '-' | '+' | '=' | ';' | ':'
+            | '\'' | '"' | ',' | '.' | '/' | '?' | '*' => Some(upper),
+            // Common typographic mappings
+            '\u{2019}' | '\u{2018}' => Some('\''), // smart quotes
+            '\u{201C}' | '\u{201D}' => Some('"'),  // smart double quotes
+            '\u{2014}' | '\u{2013}' => Some('-'),   // em/en dash
+            '\u{2026}' => Some('.'),                 // ellipsis → period
+            _ => None,                               // unsupported → blank
+        }
+    }
+
+    /// Word-wrap text into lines that fit within BOARD_COLS.
+    fn wrap_text(text: &str) -> Vec<Vec<char>> {
+        let mut lines: Vec<Vec<char>> = Vec::new();
+
+        for input_line in text.split('\n') {
+            let normalized: Vec<char> = input_line
+                .chars()
+                .map(|c| Self::normalize_char(c).unwrap_or(' '))
+                .collect();
+
+            // Collapse multiple spaces
+            let collapsed: Vec<char> = {
+                let mut result = Vec::new();
+                let mut prev_space = false;
+                for &ch in &normalized {
+                    if ch == ' ' {
+                        if !prev_space && !result.is_empty() {
+                            result.push(' ');
+                        }
+                        prev_space = true;
+                    } else {
+                        result.push(ch);
+                        prev_space = false;
+                    }
+                }
+                // Trim trailing space
+                if result.last() == Some(&' ') {
+                    result.pop();
+                }
+                result
+            };
+
+            if collapsed.is_empty() {
+                lines.push(Vec::new());
+                continue;
+            }
+
+            // Split into words
+            let words: Vec<&[char]> = collapsed
+                .split(|c| *c == ' ')
+                .filter(|w| !w.is_empty())
+                .collect();
+
+            let mut current_line: Vec<char> = Vec::new();
+            for word in words {
+                if word.len() > BOARD_COLS {
+                    // Hard-split long words
+                    if !current_line.is_empty() {
+                        lines.push(current_line);
+                        current_line = Vec::new();
+                    }
+                    for chunk in word.chunks(BOARD_COLS) {
+                        lines.push(chunk.to_vec());
+                    }
+                } else if current_line.is_empty() {
+                    current_line = word.to_vec();
+                } else if current_line.len() + 1 + word.len() <= BOARD_COLS {
+                    current_line.push(' ');
+                    current_line.extend_from_slice(word);
+                } else {
+                    lines.push(current_line);
+                    current_line = word.to_vec();
+                }
+            }
+            if !current_line.is_empty() {
+                lines.push(current_line);
+            }
+        }
+
+        lines
+    }
+
+    /// Align a line of characters within a row based on horizontal alignment.
+    fn place_line(row: &mut [CellContent], chars: &[char], h_align: HAlign) {
+        let len = chars.len().min(BOARD_COLS);
+        let start = match h_align {
+            HAlign::Left => 0,
+            HAlign::Center => (BOARD_COLS - len) / 2,
+            HAlign::Right => BOARD_COLS - len,
+        };
+        for (i, &ch) in chars[..len].iter().enumerate() {
+            row[start + i] = CellContent::Char(ch);
+        }
+    }
+
+    /// Build a grid from a text string, with word-wrapping, normalization, and alignment.
+    ///
+    /// Returns an error if the text requires more than BOARD_ROWS lines after wrapping.
+    pub fn from_text(text: &str, h_align: HAlign, v_align: VAlign) -> Result<Self, String> {
+        let lines = Self::wrap_text(text);
+
+        if lines.len() > BOARD_ROWS {
+            return Err(format!(
+                "text requires {} lines but the board only has {BOARD_ROWS} rows",
+                lines.len()
+            ));
+        }
+
+        let mut grid = Self::blank();
+
+        let start_row = match v_align {
+            VAlign::Top => 0,
+            VAlign::Middle => (BOARD_ROWS - lines.len()) / 2,
+        };
+
+        for (i, line) in lines.iter().enumerate() {
+            let row_idx = start_row + i;
+            if row_idx < BOARD_ROWS {
+                Self::place_line(&mut grid.0[row_idx], line, h_align);
+            }
+        }
+
+        Ok(grid)
+    }
 }
 
 impl Default for Grid {
@@ -96,6 +228,8 @@ impl Default for Grid {
 pub struct Message {
     pub id: Uuid,
     pub grid: Grid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_text: Option<String>,
     pub h_align: HAlign,
     pub v_align: VAlign,
     pub queue_position: i64,
@@ -227,9 +361,11 @@ pub enum ClientMessage {
 // ── API request/response DTOs ─────────────────────────────────────
 
 /// Request body for POST /api/messages.
+/// Accepts either `text` (auto-rendered) or `grid` (raw 6×22), but not both.
 #[derive(Debug, Deserialize)]
 pub struct CreateMessageRequest {
-    pub grid: Grid,
+    pub text: Option<String>,
+    pub grid: Option<Grid>,
     #[serde(default)]
     pub h_align: HAlign,
     #[serde(default)]
@@ -239,8 +375,10 @@ pub struct CreateMessageRequest {
 }
 
 /// Request body for PUT /api/messages/:id.
+/// Accepts either `text` or `grid` to replace the content.
 #[derive(Debug, Deserialize)]
 pub struct UpdateMessageRequest {
+    pub text: Option<String>,
     pub grid: Option<Grid>,
     pub h_align: Option<HAlign>,
     pub v_align: Option<VAlign>,
