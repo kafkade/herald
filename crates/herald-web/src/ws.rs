@@ -14,6 +14,8 @@ pub struct WebSocketState {
     pub previous_grid: Vec<Vec<RwSignal<CellContent>>>,
     /// Whether we're currently connected
     pub connected: RwSignal<bool>,
+    /// Whether we've received at least one board update
+    pub has_received_update: RwSignal<bool>,
     /// Trigger signal that increments on each board update (used to start animations)
     pub update_counter: RwSignal<u64>,
 }
@@ -48,12 +50,14 @@ pub fn use_websocket() -> WebSocketState {
         .collect();
 
     let connected = RwSignal::new(false);
+    let has_received_update = RwSignal::new(false);
     let update_counter = RwSignal::new(0u64);
 
     let state = WebSocketState {
         grid,
         previous_grid,
         connected,
+        has_received_update,
         update_counter,
     };
 
@@ -155,6 +159,11 @@ fn apply_board_update(board_state: &BoardState, state: &WebSocketState) {
             let new_cell = board_state.grid.0[row][col];
             state.grid[row][col].set(new_cell);
         }
+    }
+
+    // Mark that we've received at least one update
+    if !state.has_received_update.get_untracked() {
+        state.has_received_update.set(true);
     }
 
     // Increment update counter to trigger animations

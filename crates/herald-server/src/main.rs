@@ -34,11 +34,24 @@ async fn main() {
 
     tracing::info!("Database initialized at {db_path}");
 
+    // Resolve web assets directory
+    let web_dir = env::var("HERALD_WEB_DIR")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            let default = std::path::PathBuf::from("./web-dist");
+            if default.exists() {
+                Some(default)
+            } else {
+                None
+            }
+        });
+
     // Build app
     let state = AppState::new(pool, admin_token);
     herald_server::start_rotation_task(state.clone());
     herald_server::start_cleanup_task(state.clone());
-    let app = build_router(state);
+    let app = build_router(state, web_dir);
 
     // Start server
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))

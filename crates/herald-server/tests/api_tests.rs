@@ -16,7 +16,7 @@ async fn test_app() -> (axum::Router, String) {
     let database_url = format!("sqlite:{db_path}");
     let pool = db::init_pool(&database_url).await.unwrap();
     let state = AppState::new(pool, TEST_TOKEN.to_string());
-    let router = build_router(state);
+    let router = build_router(state, None);
     (router, db_path)
 }
 
@@ -683,7 +683,7 @@ async fn ws_broadcast_delivers_message() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -733,7 +733,7 @@ async fn ws_broadcast_on_message_create() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -795,7 +795,7 @@ async fn ws_broadcast_on_message_delete() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -871,7 +871,7 @@ async fn ws_broadcast_on_countdown_create() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -934,7 +934,7 @@ async fn ws_initial_state_empty_board() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1001,7 +1001,7 @@ async fn ws_initial_state_with_existing_message() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1082,7 +1082,7 @@ async fn rotation_advance_cycles_through_queue() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1166,7 +1166,7 @@ async fn rotation_skips_and_deletes_expired_messages() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1250,7 +1250,7 @@ async fn rotation_all_expired_results_in_empty_board() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1318,7 +1318,7 @@ async fn countdown_renders_on_board_state() {
     let database_url = format!("sqlite:{db_path}");
     let pool = herald_server::db::init_pool(&database_url).await.unwrap();
     let state = herald_server::state::AppState::new(pool, TEST_TOKEN.to_string());
-    let app = herald_server::build_router(state.clone());
+    let app = herald_server::build_router(state.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

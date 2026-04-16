@@ -284,7 +284,12 @@ pub fn start_cleanup_task(state: AppState) -> tokio::task::JoinHandle<()> {
 }
 
 /// Build the full Axum router with all routes.
-pub fn build_router(state: AppState) -> Router {
+///
+/// When `web_dir` is `Some` and the directory exists, static files from that
+/// directory are served as a fallback for any path that doesn't match an API or
+/// WebSocket route. `index.html` is returned for unknown paths to support SPA
+/// client-side routing.
+pub fn build_router(state: AppState, web_dir: Option<std::path::PathBuf>) -> Router {
     // Admin routes — protected by bearer token auth
     let admin_api = Router::new()
         // Messages
@@ -312,9 +317,27 @@ pub fn build_router(state: AppState) -> Router {
     // Public routes — no auth required
     let public_api = Router::new().route("/health", get(api::health::health));
 
-    Router::new()
+    let mut router = Router::new()
         .nest("/api", admin_api)
         .nest("/api", public_api)
         .route("/ws", get(ws::ws_upgrade))
-        .with_state(state)
+        .with_state(state);
+
+    // Serve static web assets if web_dir is configured and exists
+    if let Some(dir) = web_dir {
+        if dir.exists() {
+            tracing::info!("Serving web assets from {}", dir.display());
+            let serve_dir = tower_http::services::ServeDir::new(&dir)
+                .append_index_html_on_directories(true)
+                .fallback(tower_http::services::ServeFile::new(dir.join("index.html")));
+            router = router.fallback_service(serve_dir);
+        } else {
+            tracing::warn!(
+                "Web directory {} does not exist, static file serving disabled",
+                dir.display()
+            );
+        }
+    }
+
+    router
 }
