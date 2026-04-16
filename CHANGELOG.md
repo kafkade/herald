@@ -41,3 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Split-flap flip animation in `herald watch` — tiles cycle through intermediate characters with a "─X─" mid-flip visual when the board transitions between messages
 - Left-to-right cascade stagger effect: columns start their flip animation with a 20ms delay between each, creating the characteristic split-flap wave
 - Time-based animation engine with configurable step duration (50ms/char) and column stagger (20ms), smooth mid-animation restarts when new board updates arrive
+- Board diff detection: only changed cells animate on board transitions, identical boards skip animation entirely
+- Terminal resize handling: board re-centers on resize, in-progress animations cancel and snap to target state
+- PowerShell helper scripts (`scripts/`) for common operations: `add-message`, `remove-message`, `add-countdown`, `set-rotation-interval`

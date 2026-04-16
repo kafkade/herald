@@ -43,7 +43,7 @@ impl<'a> Widget for BoardWidget<'a> {
         // Show a warning if the terminal is too small.
         if area.width < GRID_WIDTH || area.height < GRID_HEIGHT {
             let msg = format!(
-                "Terminal too small (need {}×{}, have {}×{})",
+                "Terminal too small. Minimum: {}×{} (have {}×{})",
                 GRID_WIDTH, GRID_HEIGHT, area.width, area.height
             );
             let paragraph = Paragraph::new(Text::raw(msg)).alignment(Alignment::Center);

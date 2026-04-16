@@ -174,4 +174,47 @@ mod tests {
             assert!(!row_text(&grid, r).is_empty());
         }
     }
+
+    #[test]
+    fn test_diff_grids_identical() {
+        let a = Grid::blank();
+        let b = Grid::blank();
+        let diffs = Grid::diff_grids(&a, &b);
+        assert!(diffs.is_empty());
+        assert!(Grid::grids_are_identical(&a, &b));
+    }
+
+    #[test]
+    fn test_diff_grids_one_change() {
+        let a = Grid::blank();
+        let mut b = Grid::blank();
+        b.0[2][10] = CellContent::Char('X');
+        let diffs = Grid::diff_grids(&a, &b);
+        assert_eq!(diffs, vec![(2, 10)]);
+        assert!(!Grid::grids_are_identical(&a, &b));
+    }
+
+    #[test]
+    fn test_diff_grids_multiple_changes() {
+        let a = Grid::blank();
+        let mut b = Grid::blank();
+        b.0[0][0] = CellContent::Char('A');
+        b.0[3][15] = CellContent::Char('B');
+        b.0[5][21] = CellContent::Char('C');
+        let diffs = Grid::diff_grids(&a, &b);
+        assert_eq!(diffs, vec![(0, 0), (3, 15), (5, 21)]);
+    }
+
+    #[test]
+    fn test_diff_grids_all_different() {
+        let a = Grid::blank();
+        let mut b = Grid::blank();
+        for row in &mut b.0 {
+            for cell in row.iter_mut() {
+                *cell = CellContent::Char('Z');
+            }
+        }
+        let diffs = Grid::diff_grids(&a, &b);
+        assert_eq!(diffs.len(), BOARD_ROWS * BOARD_COLS); // 6 * 22 = 132
+    }
 }
