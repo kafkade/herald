@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use herald_common::{Grid, ServerMessage};
 use sqlx::SqlitePool;
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{Mutex, Notify, broadcast};
 
 const BROADCAST_CAPACITY: usize = 16;
 
@@ -24,6 +24,8 @@ struct InnerState {
     /// Guards the build-board-state → broadcast path so concurrent mutations
     /// cannot interleave and produce out-of-order previous_grid values.
     pub notify_lock: Mutex<Grid>,
+    /// Signals the rotation task to restart its timer (e.g., after config change or queue mutation).
+    pub rotation_notify: Notify,
 }
 
 impl AppState {
@@ -38,6 +40,7 @@ impl AppState {
                 viewer_count: AtomicUsize::new(0),
                 next_client_id: AtomicU64::new(1),
                 notify_lock: Mutex::new(Grid::blank()),
+                rotation_notify: Notify::new(),
             }),
         }
     }
@@ -106,5 +109,17 @@ impl AppState {
                 tracing::error!("Failed to build board state for broadcast: {e}");
             }
         }
+    }
+
+    /// Signal the rotation task to reset its timer and re-read the interval.
+    /// Call this after config changes or queue mutations.
+    pub fn reset_rotation_timer(&self) {
+        self.inner.rotation_notify.notify_one();
+    }
+
+    /// Wait for a rotation timer reset signal.
+    /// Used by the rotation task in its select loop.
+    pub async fn rotation_notified(&self) {
+        self.inner.rotation_notify.notified().await;
     }
 }

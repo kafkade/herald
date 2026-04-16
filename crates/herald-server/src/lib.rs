@@ -9,6 +9,80 @@ use axum::routing::{delete, get, post, put};
 
 use state::AppState;
 
+/// Spawn the background rotation task that advances the queue on a timer.
+/// Returns the JoinHandle for the spawned task.
+pub fn start_rotation_task(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        tracing::info!("Rotation task started");
+
+        loop {
+            let interval_secs = match db::get_rotation_interval(state.pool()).await {
+                Ok(secs) => secs,
+                Err(e) => {
+                    tracing::error!("Failed to read rotation interval: {e}");
+                    10 // fallback default
+                }
+            };
+
+            if interval_secs == 0 {
+                tracing::debug!("Rotation disabled (interval = 0), waiting for config change");
+                state.rotation_notified().await;
+                continue;
+            }
+
+            tracing::debug!("Next rotation tick in {interval_secs}s");
+
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {
+                    match db::get_queue(state.pool()).await {
+                        Ok(queue) if queue.is_empty() => {
+                            tracing::trace!("Rotation tick: queue is empty, nothing to rotate");
+                        }
+                        Ok(queue) if queue.len() == 1 => {
+                            // Single item — don't advance, but do clean up expired items
+                            // (if the single item is expired, this will remove it)
+                            match db::delete_expired_messages(state.pool()).await {
+                                Ok(0) => {
+                                    tracing::trace!("Rotation tick: single item in queue, skipping rotation");
+                                }
+                                Ok(deleted) => {
+                                    tracing::info!("Rotation: removed {deleted} expired message(s), queue may now be empty");
+                                    state.notify_board_update().await;
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to clean expired messages: {e}");
+                                }
+                            }
+                        }
+                        Ok(_) => {
+                            // Multiple items — advance with expiry handling
+                            match db::advance_to_next_valid_item(state.pool()).await {
+                                Ok(deleted) => {
+                                    if deleted > 0 {
+                                        tracing::info!("Rotation: removed {deleted} expired message(s)");
+                                    }
+                                    tracing::debug!("Rotation tick: advanced to next item");
+                                    state.notify_board_update().await;
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to advance rotation: {e}");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to read queue for rotation: {e}");
+                        }
+                    }
+                }
+                _ = state.rotation_notified() => {
+                    tracing::debug!("Rotation timer reset");
+                    continue;
+                }
+            }
+        }
+    })
+}
+
 /// Build the full Axum router with all routes.
 pub fn build_router(state: AppState) -> Router {
     // Admin routes — protected by bearer token auth

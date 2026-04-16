@@ -41,6 +41,7 @@ pub async fn create(
 
     db::create_countdown(state.pool(), &cd).await?;
     state.notify_board_update().await;
+    state.reset_rotation_timer();
 
     Ok((StatusCode::CREATED, Json(cd)))
 }
@@ -96,5 +97,6 @@ pub async fn delete(
         return Err(ApiError::NotFound(format!("countdown {id} not found")));
     }
     state.notify_board_update().await;
+    state.reset_rotation_timer();
     Ok(StatusCode::NO_CONTENT)
 }
