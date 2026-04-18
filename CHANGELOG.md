@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web viewer development proxy configuration in `Trunk.toml` (auto-proxies `/api` and `/ws` to the server)
 - Web viewer section in README with setup instructions for both production and development modes
 - `requestAnimationFrame` batching for WebSocket board updates — coalesces rapid messages into a single paint frame for smoother 60fps animations
+- `herald push "TEXT"` command to post messages to the board via REST API, with `--align`, `--expires`, `--server`, and `--token` flags
+- `herald countdown create`, `list`, and `delete` subcommands for managing countdowns via REST API, with formatted table output showing remaining time
 
 ### Changed
 
