@@ -1,0 +1,12 @@
+target/
+.git/
+.github/
+docs/
+*.md
+!README.md
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+crates/herald-web/dist/

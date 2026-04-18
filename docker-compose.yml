@@ -1,0 +1,16 @@
+services:
+  herald:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - herald_data:/data
+    environment:
+      HERALD_ADMIN_TOKEN: "${HERALD_ADMIN_TOKEN:-changeme}"
+      HERALD_DB_PATH: /data/herald.db
+      HERALD_PORT: "3000"
+      HERALD_LOG_LEVEL: info
+    restart: unless-stopped
+
+volumes:
+  herald_data:
