@@ -73,6 +73,7 @@ pub fn AdminPanel() -> impl IntoView {
                             <super::MessageComposer />
                             <super::CountdownManager />
                             <super::QueueManager />
+                            <super::ConfigPanel />
                         </div>
                     }.into_any()
                 }
