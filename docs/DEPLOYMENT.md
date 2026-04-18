@@ -1,6 +1,6 @@
 # Herald — Deployment Guide
 
-> **Note:** This document describes the *planned* deployment setup for production use. Docker, systemd units, and reverse proxy configurations are not yet implemented (see [ROADMAP.md](./ROADMAP.md) Phase 7). For current usage, see the [README](../README.md) Quick Start section.
+> **Note:** Docker deployment (Dockerfile, docker-compose.yml) is implemented and ready for use. Systemd service units and reverse proxy configurations are planned for a future release. See also the [README](../README.md) Quick Start section.
 
 This guide covers everything you need to deploy Herald, from Docker containers to bare-metal installs. By the end, you should have a running Herald instance accessible via web browser or CLI viewer.
 
@@ -134,6 +134,8 @@ EXPOSE 3000
 ENTRYPOINT ["herald", "serve"]
 ```
 
+> **Note:** The example above uses the old double-underscore (`HERALD_SERVER__PORT`) env var format and a simplified build. See the actual `Dockerfile` in the repository root for the current implementation, which uses `cargo-chef` for cached dependency builds, flat env vars (`HERALD_PORT`, `HERALD_DB_PATH`, etc.), and `curl` for health checks.
+
 ### 2.2 Docker Compose
 
 Create a `docker-compose.yml` in the repository root:
@@ -156,6 +158,8 @@ services:
 volumes:
   herald_data:
 ```
+
+> **Note:** The example above uses the old double-underscore env var format (`HERALD_AUTH__ADMIN_TOKEN`, `HERALD_SERVER__PORT`, etc.). The actual `docker-compose.yml` in the repository root uses the flat format (`HERALD_ADMIN_TOKEN`, `HERALD_PORT`, `HERALD_DB_PATH`, `HERALD_WEB_DIR`, `HERALD_LOG_LEVEL`). See that file for the current implementation.
 
 > **Important:** Replace `your-secret-token-here` with a strong, random token. Generate one with:
 > ```bash
@@ -403,6 +407,8 @@ path = "/ws"
 
 Environment variables follow the pattern `HERALD_<SECTION>__<KEY>` — note the **double underscore** (`__`) separating nested TOML table names from key names.
 
+> **Note:** The current Herald server implementation uses **flat** environment variable names instead of the double-underscore nested format shown in the table below. The actual env vars are: `HERALD_PORT`, `HERALD_DB_PATH`, `HERALD_WEB_DIR`, `HERALD_ADMIN_TOKEN`, `HERALD_LOG_LEVEL`, and `HERALD_LOG_FORMAT`. See the `Dockerfile` and `.env.example` in the repository root for the canonical list.
+
 | TOML Key                            | Environment Variable                      | Example Value             |
 |-------------------------------------|-------------------------------------------|---------------------------|
 | `server.bind_address`               | `HERALD_SERVER__BIND_ADDRESS`             | `0.0.0.0`                |
@@ -421,7 +427,7 @@ Environment variables follow the pattern `HERALD_<SECTION>__<KEY>` — note the 
 **Example:** Override the port and admin token via environment variables:
 
 ```bash
-HERALD_SERVER__PORT=8080 HERALD_AUTH__ADMIN_TOKEN="super-secret" herald serve
+HERALD_PORT=8080 HERALD_ADMIN_TOKEN="super-secret" herald-server
 ```
 
 ---
@@ -532,7 +538,7 @@ sudo caddy start --config /etc/caddy/Caddyfile
 
 ### SQLite Database
 
-Herald stores all data in a single SQLite file. By default, this is `./herald.db` (relative to the working directory), configurable via `database.path` in `herald.toml` or `HERALD_DATABASE__PATH`.
+Herald stores all data in a single SQLite file. By default, this is `./herald.db` (relative to the working directory), configurable via `database.path` in `herald.toml` or the `HERALD_DB_PATH` environment variable.
 
 **First run:** The database file is created automatically. Herald runs all pending migrations on startup — no manual setup required.
 
@@ -550,7 +556,7 @@ sqlite3 herald.db ".backup herald-backup.db"
 
 - **Always use a named volume** (as shown in the Docker Compose example) to persist data across container rebuilds.
 - **Never store the database inside the container's writable layer** — it will be lost on `docker compose down`.
-- The volume mount point should match `HERALD_DATABASE__PATH` (default: `/data/herald.db`).
+- The volume mount point should match `HERALD_DB_PATH` (default: `/data/herald.db`).
 
 ```yaml
 volumes:

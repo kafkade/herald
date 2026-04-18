@@ -3,7 +3,7 @@
 > Architectural foundation for the Herald split-flap message board system.
 > This document describes the system's components, how they communicate, and how the codebase is organized.
 >
-> **Implementation status:** Phases 1–4 are complete (server, CLI viewer with animation). The web viewer (`herald-web`), admin CLI subcommands, Docker packaging, and deployment tooling described below are part of the planned architecture but are not yet implemented. See [ROADMAP.md](./ROADMAP.md) for details.
+> **Implementation status:** Phases 1–7 are implemented: server with REST API, WebSocket, SQLite persistence, rotation engine, countdown logic, CLI viewer with split-flap animation, web viewer with 3D CSS flips, CLI admin subcommands (`push`, `countdown`, `queue`, `config`), web admin panel (message composer, countdown manager, queue manager, config editor), color markup parser, Docker packaging with multi-stage build, graceful shutdown, and structured logging. Phase 8 (sound effects, themes, scheduling, rate limiting) is planned. See [ROADMAP.md](./ROADMAP.md) for details.
 
 ---
 

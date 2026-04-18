@@ -26,12 +26,17 @@ Herald is an open-source, split-flap / Vestaboard-style digital message board an
 - **Simple auth** — single admin with bearer-token authentication
 - **SQLite persistence** — data survives restarts
 - **PowerShell helper scripts** — quick admin without remembering curl syntax
+- **CLI admin tools** — `herald push`, `herald countdown`, `herald queue`, `herald config` subcommands for full board management from the terminal
+- **Message preview** — `--preview` flag renders an ASCII grid preview before pushing
+- **Color markup** — inline `{red}text{/red}` syntax for colored text in messages
+- **Web admin panel** — `/admin` route with token auth, message composer with live preview, countdown manager, queue manager with drag-to-reorder, and server config editor
+- **Docker deployment** — multi-stage Dockerfile with cargo-chef caching, Docker Compose with healthcheck and persistent volumes
+- **Graceful shutdown** — clean SIGTERM/SIGINT handling with WebSocket client notification
+- **Structured logging** — HTTP request/response tracing with optional JSON output format
 - **All Rust** — monorepo, one toolchain
 
 ### Roadmap (not yet implemented)
 
-- Admin web panel and CLI admin subcommands
-- Docker packaging and deployment tooling
 - Sound effects, themes, scheduling, rate limiting
 
 ---
@@ -129,6 +134,32 @@ $env:HERALD_ADMIN_TOKEN = "your-token-here"
 .\scripts\set-rotation-interval.ps1 -Seconds 15
 ```
 
+### 4b. CLI admin commands
+
+Herald includes built-in admin subcommands (no scripts needed):
+
+```bash
+# Push a message
+herald push "HELLO WORLD" --token secret
+herald push "LEFT ALIGNED" --align left --token secret
+herald push "PREVIEW FIRST" --preview --token secret
+
+# Manage countdowns
+herald countdown create --label "LAUNCH" --target "2026-12-31T00:00:00Z" --token secret
+herald countdown list --token secret
+herald countdown delete <UUID> --token secret
+
+# View and reorder the queue
+herald queue list --token secret
+herald queue reorder <id1> <id2> <id3> --token secret
+
+# View and update config
+herald config get --token secret
+herald config set rotation_interval_seconds 15 --token secret
+```
+
+The `--token` flag can also be set via `HERALD_ADMIN_TOKEN` environment variable.
+
 ### 5. Open the web viewer
 
 **Option A — Served from the server (production-style):**
@@ -155,6 +186,30 @@ trunk serve
 ```
 
 Open `http://localhost:8080` — Trunk serves the web viewer with live-reload and proxies API/WebSocket requests to the server.
+
+### 5b. Web admin panel
+
+Navigate to `http://localhost:3000/admin` (or `http://localhost:8080/admin` in dev mode) to access the admin panel. Features:
+- **Message Composer** — type a message and see a live 6×22 grid preview, select alignment, set optional expiry, and push
+- **Countdown Manager** — create, view (with live remaining time), and delete countdowns
+- **Queue Manager** — view queue items and drag-to-reorder
+- **Config Editor** — view and edit all server settings
+
+You'll be prompted for your admin token on first visit. The token is stored in your browser's localStorage.
+
+### 6. Docker deployment
+
+```bash
+# Quick start with Docker Compose
+HERALD_ADMIN_TOKEN=your-secret docker compose up --build
+
+# Or customize via .env file (see .env.example)
+cp .env.example .env
+# Edit .env with your settings
+docker compose up -d
+```
+
+The Docker image uses a multi-stage build with cargo-chef for dependency caching. The runtime image is based on `debian:bookworm-slim` and includes a healthcheck on `/api/health`.
 
 ### Using curl instead
 
@@ -299,6 +354,7 @@ Zero behaviors: `show_zero`, `remove`, `pause`, `show_message`.
 | `HERALD_PORT` | `3000` | Server listen port |
 | `HERALD_LOG_LEVEL` | `info` | Log level (trace, debug, info, warn, error) |
 | `HERALD_WEB_DIR` | `./web-dist` | Directory for compiled web viewer assets (auto-detected) |
+| `HERALD_LOG_FORMAT` | *(pretty)* | Log output format: `json` for structured logs, default is human-readable |
 
 ---
 
@@ -306,7 +362,7 @@ Zero behaviors: `show_zero`, `remove`, `pause`, `show_message`.
 
 ```bash
 cargo build                       # Debug build (server + CLI)
-cargo test                        # Run all tests (~90 tests)
+cargo test                        # Run all tests (103+ tests)
 cargo clippy                      # Lint
 cargo fmt                         # Format
 cargo run -p herald-server        # Start the server
