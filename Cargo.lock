@@ -1099,13 +1099,16 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 name = "herald-cli"
 version = "0.5.2"
 dependencies = [
+ "chrono",
  "clap",
  "crossterm",
  "futures-util",
  "herald-common",
  "ratatui",
+ "reqwest",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tracing",

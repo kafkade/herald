@@ -1,8 +1,9 @@
+mod api_client;
 mod commands;
 mod ui;
 mod ws_client;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use commands::watch::AnimationSpeed;
 
 #[derive(Parser)]
@@ -11,6 +12,17 @@ use commands::watch::AnimationSpeed;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+/// Shared API connection arguments for admin commands.
+#[derive(Args, Clone)]
+struct ApiArgs {
+    /// Herald server URL
+    #[arg(long, default_value = "http://localhost:3000")]
+    server: String,
+    /// Bearer token for authentication
+    #[arg(long, env = "HERALD_ADMIN_TOKEN")]
+    token: String,
 }
 
 #[derive(Subcommand)]
@@ -30,13 +42,57 @@ enum Command {
         animation_speed: AnimationSpeed,
     },
     /// Push a message to the board
-    Push,
+    Push {
+        /// Message text to display
+        text: String,
+        /// Text alignment: left, center, or right
+        #[arg(long, default_value = "center")]
+        align: String,
+        /// Expiry time in ISO-8601 format (e.g. "2025-12-31T23:59:59Z")
+        #[arg(long)]
+        expires: Option<String>,
+        #[command(flatten)]
+        api: ApiArgs,
+    },
     /// Manage countdowns
-    Countdown,
+    Countdown {
+        #[command(subcommand)]
+        command: CountdownCommand,
+    },
     /// Manage the display queue
     Queue,
     /// View or update server configuration
     Config,
+}
+
+#[derive(Subcommand)]
+enum CountdownCommand {
+    /// Create a new countdown
+    Create {
+        /// Countdown label (e.g. "NEW YEAR")
+        #[arg(long)]
+        label: String,
+        /// Target time in ISO-8601 format (e.g. "2025-12-31T00:00:00Z")
+        #[arg(long)]
+        target: String,
+        /// Behavior when countdown reaches zero: show_zero, remove, or pause
+        #[arg(long, default_value = "show_zero")]
+        zero_behavior: String,
+        #[command(flatten)]
+        api: ApiArgs,
+    },
+    /// List all countdowns
+    List {
+        #[command(flatten)]
+        api: ApiArgs,
+    },
+    /// Delete a countdown
+    Delete {
+        /// Countdown ID to delete
+        id: String,
+        #[command(flatten)]
+        api: ApiArgs,
+    },
 }
 
 #[tokio::main]
@@ -53,14 +109,29 @@ async fn main() {
             eprintln!("serve is not yet implemented");
             Ok(())
         }
-        Command::Push => {
-            eprintln!("push is not yet implemented");
-            Ok(())
-        }
-        Command::Countdown => {
-            eprintln!("countdown is not yet implemented");
-            Ok(())
-        }
+        Command::Push {
+            text,
+            align,
+            expires,
+            api,
+        } => commands::push::run(text, api.server, api.token, align, expires).await,
+        Command::Countdown { command } => match command {
+            CountdownCommand::Create {
+                label,
+                target,
+                zero_behavior,
+                api,
+            } => {
+                commands::countdown::create(api.server, api.token, label, target, zero_behavior)
+                    .await
+            }
+            CountdownCommand::List { api } => {
+                commands::countdown::list(api.server, api.token).await
+            }
+            CountdownCommand::Delete { id, api } => {
+                commands::countdown::delete(api.server, api.token, id).await
+            }
+        },
         Command::Queue => {
             eprintln!("queue is not yet implemented");
             Ok(())

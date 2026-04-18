@@ -380,7 +380,7 @@ pub enum ClientMessage {
 
 /// Request body for POST /api/messages.
 /// Accepts either `text` (auto-rendered) or `grid` (raw 6×22), but not both.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateMessageRequest {
     pub text: Option<String>,
     pub grid: Option<Grid>,
@@ -405,7 +405,7 @@ pub struct UpdateMessageRequest {
 }
 
 /// Request body for POST /api/countdowns.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateCountdownRequest {
     pub label: String,
     pub target: DateTime<Utc>,
@@ -446,7 +446,7 @@ pub struct UpdateConfigRequest {
 // ── Standard API response wrappers ────────────────────────────────
 
 /// Standard list response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ListResponse<T: Serialize> {
     pub items: Vec<T>,
     pub total: usize,
