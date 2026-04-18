@@ -317,6 +317,64 @@
             }
         }
 
+        /* ===== Theme: Classic (traditional split-flap) ===== */
+        [data-theme="classic"] {
+            --board-bg: #111;
+            --tile-top-bg: #1a1a1a;
+            --tile-bottom-bg: #161616;
+            --tile-char-color: #e8c547;
+            --tile-split-line: #0a0a0a;
+        }
+
+        [data-theme="classic"] ~ .board-status {
+            color: #b0a060;
+        }
+
+        /* ===== Theme: Custom (user-defined via config) ===== */
+        /* Custom theme colors are applied as inline CSS custom properties */
+
+        /* ===== Sound Toggle ===== */
+        .sound-toggle {
+            position: fixed;
+            bottom: 1rem;
+            left: 1rem;
+            width: 2.2rem;
+            height: 2.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            color: #888;
+            font-size: 1rem;
+            cursor: pointer;
+            z-index: 100;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .sound-toggle:hover {
+            background: rgba(0, 0, 0, 0.9);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: #f0f0f0;
+        }
+
+        .sound-toggle:focus-visible {
+            outline: 2px solid #4caf50;
+            outline-offset: 2px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .flap-top--flipping,
+            .flap-bottom-flip {
+                animation-duration: 0.01ms !important;
+            }
+        }
+
         /* ===== Admin Panel ===== */
         .admin-container {
             min-height: 100vh;

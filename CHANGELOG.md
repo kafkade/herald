@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional mechanical "clack" sound effect on web tile flips using the Web Audio API — programmatic noise-burst synthesis with band-pass filter, staggered per-column to match the visual cascade
+- Mute/unmute toggle button (🔊/🔇) in the bottom-left corner of the web viewer — persists preference in `localStorage`, keyboard-focusable with `aria-label`, respects `prefers-reduced-motion`
+- Board theme system with three built-in themes: **Classic** (black background, warm yellow text), **Dark** (dark gray background, white text — default), and **Custom** (user-defined hex colors via config)
+- Theme selector in the web admin config panel and `herald config set theme <name>` CLI command
+- Custom theme color config keys: `theme_custom_board_bg`, `theme_custom_tile_bg`, `theme_custom_char_color` (validated `#RRGGBB` hex)
+- Theme-aware rendering in the CLI viewer — Classic theme uses warm yellow characters and dark gray borders
+- Docker image build and push to `ghcr.io` in the release workflow, with semver tags and GitHub Actions build cache
 - Web viewer development proxy configuration in `Trunk.toml` (auto-proxies `/api` and `/ws` to the server)
 - Web viewer section in README with setup instructions for both production and development modes
 - `requestAnimationFrame` batching for WebSocket board updates — coalesces rapid messages into a single paint frame for smoother 60fps animations

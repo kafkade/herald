@@ -8,6 +8,10 @@ const KNOWN_KEYS: &[&str] = &[
     "default_v_align",
     "default_color",
     "countdown_zero_behavior",
+    "theme",
+    "theme_custom_board_bg",
+    "theme_custom_tile_bg",
+    "theme_custom_char_color",
 ];
 
 fn config_description(key: &str) -> &'static str {
@@ -18,6 +22,10 @@ fn config_description(key: &str) -> &'static str {
         "default_v_align" => "Default vertical alignment (top/middle)",
         "default_color" => "Default tile color",
         "countdown_zero_behavior" => "What happens when countdown reaches zero",
+        "theme" => "Board theme (dark/classic/custom)",
+        "theme_custom_board_bg" => "Custom theme: board background (#RRGGBB)",
+        "theme_custom_tile_bg" => "Custom theme: tile background (#RRGGBB)",
+        "theme_custom_char_color" => "Custom theme: character color (#RRGGBB)",
         _ => "",
     }
 }

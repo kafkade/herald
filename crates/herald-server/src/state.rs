@@ -146,6 +146,8 @@ impl AppState {
                     previous_grid: last_grid.clone(),
                     current_item: None,
                     timestamp: chrono::Utc::now(),
+                    theme: herald_common::ThemeKind::default(),
+                    theme_colors: None,
                 };
                 drop(last_grid);
                 let _ = self

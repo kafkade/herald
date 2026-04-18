@@ -528,7 +528,54 @@ pub async fn build_board_state(pool: &SqlitePool) -> Result<BoardState, sqlx::Er
         previous_grid: Grid::blank(),
         current_item: Some(item_info),
         timestamp: chrono::Utc::now(),
+        theme: get_theme(pool).await,
+        theme_colors: get_theme_colors(pool).await,
     })
+}
+
+/// Read the active theme from config. Defaults to Dark.
+pub async fn get_theme(pool: &SqlitePool) -> ThemeKind {
+    let row = sqlx::query("SELECT value FROM configuration WHERE key = 'theme'")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+
+    match row {
+        Some(row) => {
+            let value: String = row.get("value");
+            ThemeKind::from_str_lossy(&value)
+        }
+        None => ThemeKind::default(),
+    }
+}
+
+/// Read custom theme colors from config (only used when theme is Custom).
+pub async fn get_theme_colors(pool: &SqlitePool) -> Option<ThemeColors> {
+    let theme = get_theme(pool).await;
+    if theme != ThemeKind::Custom {
+        return None;
+    }
+
+    let config = get_config(pool).await.ok()?;
+    let colors = ThemeColors {
+        board_bg: config
+            .get("theme_custom_board_bg")
+            .and_then(|v| v.as_str().map(String::from)),
+        tile_bg: config
+            .get("theme_custom_tile_bg")
+            .and_then(|v| v.as_str().map(String::from)),
+        char_color: config
+            .get("theme_custom_char_color")
+            .and_then(|v| v.as_str().map(String::from)),
+    };
+
+    // Only return if at least one color is set
+    if colors.board_bg.is_some() || colors.tile_bg.is_some() || colors.char_color.is_some() {
+        Some(colors)
+    } else {
+        None
+    }
 }
 
 /// Advance the rotation index to the next queue item and return the new index.

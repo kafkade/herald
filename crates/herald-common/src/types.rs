@@ -312,6 +312,68 @@ pub struct QueueItemInfo {
     pub label: String,
 }
 
+// ── Board themes ──────────────────────────────────────────────────
+
+/// Built-in board themes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeKind {
+    /// Traditional split-flap: black background, warm yellow text.
+    Classic,
+    /// Modern minimal: dark gray background, white text.
+    #[default]
+    Dark,
+    /// User-defined colors via config.
+    Custom,
+}
+
+impl ThemeKind {
+    /// Parse a string into a ThemeKind, defaulting to Dark for unrecognized values.
+    pub fn from_str_lossy(s: &str) -> Self {
+        match s {
+            "classic" => Self::Classic,
+            "dark" => Self::Dark,
+            "custom" => Self::Custom,
+            _ => Self::Dark,
+        }
+    }
+}
+
+/// Custom theme color palette (validated hex colors).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThemeColors {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub board_bg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tile_bg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub char_color: Option<String>,
+}
+
+impl ThemeColors {
+    /// Validate that all provided colors are valid hex colors (#RRGGBB).
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("board_bg", &self.board_bg),
+            ("tile_bg", &self.tile_bg),
+            ("char_color", &self.char_color),
+        ] {
+            if let Some(v) = value
+                && !Self::is_valid_hex(v)
+            {
+                return Err(format!(
+                    "{name} must be a valid hex color (#RRGGBB), got: {v}"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn is_valid_hex(s: &str) -> bool {
+        s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
+    }
+}
+
 // ── Board state ───────────────────────────────────────────────────
 
 /// The full board state broadcast to viewers.
@@ -322,6 +384,10 @@ pub struct BoardState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_item: Option<QueueItemInfo>,
     pub timestamp: DateTime<Utc>,
+    #[serde(default)]
+    pub theme: ThemeKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_colors: Option<ThemeColors>,
 }
 
 impl Default for BoardState {
@@ -331,6 +397,8 @@ impl Default for BoardState {
             previous_grid: Grid::blank(),
             current_item: None,
             timestamp: Utc::now(),
+            theme: ThemeKind::default(),
+            theme_colors: None,
         }
     }
 }
