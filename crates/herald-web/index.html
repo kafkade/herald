@@ -316,6 +316,561 @@
                 margin: 0 auto;
             }
         }
+
+        /* ===== Admin Panel ===== */
+        .admin-container {
+            min-height: 100vh;
+            background: #0d0d0d;
+            color: #f0f0f0;
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 1rem;
+            max-width: 52rem;
+            margin: 0 auto;
+        }
+
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #333;
+            margin-bottom: 1.5rem;
+        }
+
+        .admin-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #f0f0f0;
+        }
+
+        .admin-nav {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .admin-nav-link {
+            color: #888;
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+
+        .admin-nav-link:hover {
+            color: #f0f0f0;
+        }
+
+        .admin-logout-btn {
+            background: none;
+            border: 1px solid #555;
+            color: #888;
+            padding: 0.3rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .admin-logout-btn:hover {
+            border-color: #f44336;
+            color: #f44336;
+        }
+
+        .admin-panels {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .admin-placeholder {
+            color: #666;
+            text-align: center;
+            padding: 3rem 0;
+            font-size: 0.9rem;
+        }
+
+        /* ===== Login Dialog ===== */
+        .login-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            backdrop-filter: blur(4px);
+        }
+
+        .login-dialog {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 2rem;
+            width: 20rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .login-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .login-subtitle {
+            color: #888;
+            font-size: 0.85rem;
+            text-align: center;
+        }
+
+        .login-error {
+            background: rgba(244, 67, 54, 0.15);
+            color: #f44336;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .login-input {
+            background: #0d0d0d;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 0.6rem 0.75rem;
+            color: #f0f0f0;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .login-input:focus {
+            border-color: #4caf50;
+        }
+
+        .login-btn {
+            background: #4caf50;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .login-btn:hover {
+            background: #43a047;
+        }
+        /* ===== Message Composer ===== */
+        .composer {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+
+        .composer-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #f0f0f0;
+        }
+
+        .composer-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .composer-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .composer-row > .composer-input-group {
+            flex: 1;
+        }
+
+        .composer-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+
+        .composer-label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .composer-textarea {
+            background: #0d0d0d;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 0.6rem 0.75rem;
+            color: #f0f0f0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .composer-textarea:focus {
+            border-color: #4caf50;
+        }
+
+        .composer-select,
+        .composer-datetime {
+            background: #0d0d0d;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 0.5rem 0.6rem;
+            color: #f0f0f0;
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .composer-select:focus,
+        .composer-datetime:focus {
+            border-color: #4caf50;
+        }
+
+        .composer-push-btn {
+            background: #4caf50;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 0.25rem;
+        }
+
+        .composer-push-btn:hover:not(:disabled) {
+            background: #43a047;
+        }
+
+        .composer-push-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ===== Live Preview Grid ===== */
+        .composer-preview {
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px solid #333;
+        }
+
+        .composer-preview-title {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #888;
+            margin-bottom: 0.75rem;
+        }
+
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(22, 1fr);
+            gap: 1px;
+            background: #111;
+            border-radius: 6px;
+            padding: 4px;
+            max-width: 100%;
+        }
+
+        .preview-tile {
+            aspect-ratio: 1 / 1.2;
+            background: #2c2c2c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 2px;
+            min-width: 0;
+        }
+
+        .preview-tile .flap-char {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: clamp(0.45rem, 1.8vw, 0.85rem);
+            font-weight: 700;
+            color: #f0f0f0;
+            line-height: 1;
+        }
+
+        .preview-tile--blank {
+            background: #222;
+        }
+
+        .preview-tile--color {
+            border-radius: 2px;
+        }
+
+        .preview-tile--color .flap-char {
+            display: none;
+        }
+
+        /* ===== Toast Notifications ===== */
+        .toast {
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            text-align: center;
+            margin-bottom: 0.75rem;
+            animation: toast-in 0.2s ease-out;
+        }
+
+        .toast-success {
+            background: rgba(76, 175, 80, 0.15);
+            color: #4caf50;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .toast-error {
+            background: rgba(244, 67, 54, 0.15);
+            color: #f44336;
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateY(-0.5rem); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== Queue Manager ===== */
+        .queue-mgr {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+
+        .queue-mgr-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #f0f0f0;
+        }
+
+        .queue-saving {
+            font-size: 0.75rem;
+            color: #ff9800;
+            font-weight: 400;
+            margin-left: 0.5rem;
+        }
+
+        .queue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .queue-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #0d0d0d;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            cursor: grab;
+            transition: all 0.15s;
+            user-select: none;
+        }
+
+        .queue-item:active {
+            cursor: grabbing;
+        }
+
+        .queue-item--current {
+            border-color: #4caf50;
+            background: rgba(76, 175, 80, 0.08);
+        }
+
+        .queue-item--drag-over {
+            border-color: #2196f3;
+            border-style: dashed;
+            background: rgba(33, 150, 243, 0.08);
+        }
+
+        .queue-item-handle {
+            color: #555;
+            font-size: 1rem;
+            cursor: grab;
+            flex-shrink: 0;
+        }
+
+        .queue-item-kind {
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        .queue-item-label {
+            flex: 1;
+            font-size: 0.85rem;
+            color: #f0f0f0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .queue-item-pos {
+            font-size: 0.75rem;
+            color: #888;
+            flex-shrink: 0;
+        }
+
+        .queue-item-expiry {
+            font-size: 0.75rem;
+            color: #666;
+            flex-shrink: 0;
+            min-width: 5rem;
+            text-align: right;
+        }
+
+        .queue-item-badge {
+            font-size: 0.7rem;
+            color: #4caf50;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-left: 0.25rem;
+        }
+
+        .queue-empty {
+            color: #666;
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 1.5rem 0;
+        }
+
+        /* ===== Countdown Manager ===== */
+        .countdown-mgr {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+
+        .countdown-mgr-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #f0f0f0;
+        }
+
+        .countdown-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #333;
+        }
+
+        .countdown-form-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .countdown-form-row > .composer-input-group {
+            flex: 1;
+        }
+
+        .countdown-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .countdown-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #0d0d0d;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            padding: 0.6rem 0.75rem;
+        }
+
+        .countdown-item-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+
+        .countdown-item-label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #f0f0f0;
+        }
+
+        .countdown-item-meta {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .countdown-item-remaining {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #4caf50;
+            min-width: 6rem;
+            text-align: right;
+        }
+
+        .countdown-item-remaining.expired {
+            color: #f44336;
+        }
+
+        .countdown-delete-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #888;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-left: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .countdown-delete-btn:hover {
+            border-color: #f44336;
+            color: #f44336;
+        }
+
+        .countdown-empty {
+            color: #666;
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .countdown-create-btn {
+            background: #4caf50;
+            border: none;
+            border-radius: 6px;
+            padding: 0.5rem;
+            color: white;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .countdown-create-btn:hover:not(:disabled) {
+            background: #43a047;
+        }
+
+        .countdown-create-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
