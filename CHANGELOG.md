@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web config panel in the admin panel with editable fields for all server settings, per-field input types, change highlighting, and save with toast feedback
 - Multi-stage Dockerfile with cargo-chef dependency caching, Trunk/WASM web build, and minimal `debian:bookworm-slim` runtime image
 - Docker Compose configuration with persistent SQLite volume and environment variable support
+- Docker Compose healthcheck using `/api/health` endpoint, with `.env.example` documenting all environment variables
+- Graceful shutdown on SIGTERM/SIGINT — notifies WebSocket clients, waits for in-flight requests, and closes the database pool
+- Structured HTTP request/response logging via `tower-http` trace layer, with optional JSON output format (`HERALD_LOG_FORMAT=json`)
+- Trunk/WASM web frontend build step in CI workflow
+- CI status badge in README
 
 ### Changed
 

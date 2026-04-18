@@ -19,6 +19,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Check formatting
         run: cargo fmt -- --check
@@ -26,3 +27,7 @@ jobs:
         run: cargo clippy -- -D warnings
       - name: Run tests
         run: cargo test
+      - name: Install Trunk
+        run: cargo install trunk
+      - name: Build web frontend
+        run: cd crates/herald-web && trunk build --release

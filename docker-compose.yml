@@ -2,14 +2,24 @@ services:
   herald:
     build: .
     ports:
-      - "3000:3000"
+      - "${HERALD_PORT:-3000}:${HERALD_PORT:-3000}"
     volumes:
       - herald_data:/data
+    env_file:
+      - path: .env
+        required: false
     environment:
       HERALD_ADMIN_TOKEN: "${HERALD_ADMIN_TOKEN:-changeme}"
       HERALD_DB_PATH: /data/herald.db
-      HERALD_PORT: "3000"
-      HERALD_LOG_LEVEL: info
+      HERALD_PORT: "${HERALD_PORT:-3000}"
+      HERALD_WEB_DIR: /home/herald/static
+      HERALD_LOG_LEVEL: "${HERALD_LOG_LEVEL:-info}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${HERALD_PORT:-3000}/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
 volumes:

@@ -321,7 +321,8 @@ pub fn build_router(state: AppState, web_dir: Option<std::path::PathBuf>) -> Rou
         .nest("/api", admin_api)
         .nest("/api", public_api)
         .route("/ws", get(ws::ws_upgrade))
-        .with_state(state);
+        .with_state(state)
+        .layer(tower_http::trace::TraceLayer::new_for_http());
 
     // Serve static web assets if web_dir is configured and exists
     if let Some(dir) = web_dir {
