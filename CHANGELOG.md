@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web countdown manager in the admin panel with create form, live remaining-time display, and delete with confirmation
 - Web queue manager in the admin panel with drag-to-reorder, current item highlighting, and auto-refresh
 - Web config panel in the admin panel with editable fields for all server settings, per-field input types, change highlighting, and save with toast feedback
+- Multi-stage Dockerfile with cargo-chef dependency caching, Trunk/WASM web build, and minimal `debian:bookworm-slim` runtime image
+- Docker Compose configuration with persistent SQLite volume and environment variable support
 
 ### Changed
 
