@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::components::SoundEngine;
 use futures::StreamExt;
 use gloo_net::websocket::{Message, futures::WebSocket};
 use gloo_timers::future::TimeoutFuture;
@@ -43,7 +44,7 @@ fn ws_url() -> String {
 
 /// Create and manage a WebSocket connection with reconnection logic.
 /// Returns reactive state that updates when board state changes.
-pub fn use_websocket() -> WebSocketState {
+pub fn use_websocket(sound: SoundEngine) -> WebSocketState {
     let grid: Vec<Vec<RwSignal<CellContent>>> = (0..BOARD_ROWS)
         .map(|_| {
             (0..BOARD_COLS)
@@ -79,7 +80,7 @@ pub fn use_websocket() -> WebSocketState {
     };
 
     let state_clone = state.clone();
-    let batcher = RafBatcher::new(state_clone);
+    let batcher = RafBatcher::new(state_clone, sound);
     spawn_local(async move {
         connection_loop(batcher).await;
     });
@@ -96,14 +97,16 @@ struct RafBatcher {
     pending: Rc<RefCell<Option<BoardState>>>,
     raf_scheduled: Rc<RefCell<bool>>,
     state: WebSocketState,
+    sound: SoundEngine,
 }
 
 impl RafBatcher {
-    fn new(state: WebSocketState) -> Self {
+    fn new(state: WebSocketState, sound: SoundEngine) -> Self {
         Self {
             pending: Rc::new(RefCell::new(None)),
             raf_scheduled: Rc::new(RefCell::new(false)),
             state,
+            sound,
         }
     }
 
@@ -117,11 +120,17 @@ impl RafBatcher {
             let pending = Rc::clone(&self.pending);
             let raf_scheduled = Rc::clone(&self.raf_scheduled);
             let state = self.state.clone();
+            let sound = self.sound.clone();
 
             let closure = Closure::once(move || {
                 *raf_scheduled.borrow_mut() = false;
                 if let Some(board_state) = pending.borrow_mut().take() {
                     apply_board_update(&board_state, &state);
+                    // Trigger sound for changed columns
+                    let cols = state.changed_cols.get_untracked();
+                    if !cols.is_empty() {
+                        sound.play_cascade(&cols);
+                    }
                 }
             });
 

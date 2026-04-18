@@ -40,10 +40,6 @@ fn current_path() -> String {
 fn App() -> impl IntoView {
     let path = use_location_path();
 
-    // Provide sound engine as context (available to all components)
-    let sound = SoundEngine::new();
-    provide_context(sound.clone());
-
     view! {
         {move || {
             if path.get().starts_with("/admin") {
@@ -58,19 +54,23 @@ fn App() -> impl IntoView {
 /// The board viewer page (existing functionality).
 #[component]
 fn BoardView() -> impl IntoView {
-    let ws_state = ws::use_websocket();
+    let sound = SoundEngine::new();
+    let ws_state = ws::use_websocket(sound.clone());
+
+    let ws_for_theme = ws_state.clone();
+    let ws_for_style = ws_state.clone();
 
     view! {
         <div
             class="herald-board"
             role="img"
             aria-label="Herald message board"
-            attr:data-theme=move || theme_attr(&ws_state)
-            style=move || theme_custom_style(&ws_state)
+            attr:data-theme=move || theme_attr(&ws_for_theme)
+            style=move || theme_custom_style(&ws_for_style)
         >
             <Board ws_state=ws_state.clone() />
         </div>
-        <SoundToggle />
+        <SoundToggle sound=sound />
         <StatusBar ws_state=ws_state />
     }
 }
@@ -111,9 +111,7 @@ fn theme_custom_style(ws: &WebSocketState) -> String {
 
 /// Sound mute/unmute toggle button (bottom-left corner).
 #[component]
-fn SoundToggle() -> impl IntoView {
-    let sound = expect_context::<SoundEngine>();
-
+fn SoundToggle(sound: SoundEngine) -> impl IntoView {
     if !sound.supported {
         return view! {}.into_any();
     }

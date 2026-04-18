@@ -1,5 +1,4 @@
 use super::tile::FlapTile;
-use crate::components::SoundEngine;
 use crate::ws::WebSocketState;
 use herald_common::{BOARD_COLS, BOARD_ROWS};
 use leptos::prelude::*;
@@ -8,16 +7,6 @@ use leptos::prelude::*;
 /// Renders a 6×22 grid of FlapTile components using CSS Grid.
 #[component]
 pub fn Board(ws_state: WebSocketState) -> impl IntoView {
-    // Play sound cascade when changed_cols updates
-    let sound = expect_context::<SoundEngine>();
-    let changed_cols = ws_state.changed_cols;
-    Effect::new(move |_| {
-        let cols = changed_cols.get();
-        if !cols.is_empty() {
-            sound.play_cascade(&cols);
-        }
-    });
-
     view! {
         <div class="board-grid">
             {(0..BOARD_ROWS).map(|row| {
