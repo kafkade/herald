@@ -70,6 +70,25 @@ impl ApiClient {
         handle_response(response).await
     }
 
+    /// Send a PUT request with a JSON body and return the deserialized response.
+    pub async fn put<Req, Res>(&self, path: &str, body: &Req) -> Result<Res, ApiError>
+    where
+        Req: serde::Serialize,
+        Res: serde::de::DeserializeOwned,
+    {
+        let url = format!("{}{path}", self.base_url);
+        let response = self
+            .client
+            .put(&url)
+            .bearer_auth(&self.token)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| classify_request_error(e, &self.base_url))?;
+
+        handle_response(response).await
+    }
+
     /// Send a DELETE request. Returns Ok(()) on 204 No Content.
     pub async fn delete(&self, path: &str) -> Result<(), ApiError> {
         let url = format!("{}{path}", self.base_url);

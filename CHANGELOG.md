@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `requestAnimationFrame` batching for WebSocket board updates — coalesces rapid messages into a single paint frame for smoother 60fps animations
 - `herald push "TEXT"` command to post messages to the board via REST API, with `--align`, `--expires`, `--server`, and `--token` flags
 - `herald countdown create`, `list`, and `delete` subcommands for managing countdowns via REST API, with formatted table output showing remaining time
+- `herald queue list` and `herald queue reorder` subcommands for viewing and reordering the display queue
+- `herald config get` and `herald config set` subcommands for viewing and updating server configuration
+- Color markup parser in `herald-common` supporting `{red}text{/red}` syntax for all 8 Vestaboard colors, with nested tag and shorthand `{}` close support
 
 ### Changed
 

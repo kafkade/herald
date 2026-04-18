@@ -60,9 +60,51 @@ enum Command {
         command: CountdownCommand,
     },
     /// Manage the display queue
-    Queue,
+    Queue {
+        #[command(subcommand)]
+        command: QueueCommand,
+    },
     /// View or update server configuration
-    Config,
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum QueueCommand {
+    /// List the display queue
+    List {
+        #[command(flatten)]
+        api: ApiArgs,
+    },
+    /// Reorder the display queue
+    Reorder {
+        /// Queue item IDs in desired order
+        ids: Vec<String>,
+        #[command(flatten)]
+        api: ApiArgs,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommand {
+    /// Get configuration values
+    Get {
+        /// Specific key to look up (shows all if omitted)
+        key: Option<String>,
+        #[command(flatten)]
+        api: ApiArgs,
+    },
+    /// Set a configuration value
+    Set {
+        /// Configuration key
+        key: String,
+        /// New value
+        value: String,
+        #[command(flatten)]
+        api: ApiArgs,
+    },
 }
 
 #[derive(Subcommand)]
@@ -132,14 +174,20 @@ async fn main() {
                 commands::countdown::delete(api.server, api.token, id).await
             }
         },
-        Command::Queue => {
-            eprintln!("queue is not yet implemented");
-            Ok(())
-        }
-        Command::Config => {
-            eprintln!("config is not yet implemented");
-            Ok(())
-        }
+        Command::Queue { command } => match command {
+            QueueCommand::List { api } => commands::queue::list(api.server, api.token).await,
+            QueueCommand::Reorder { ids, api } => {
+                commands::queue::reorder(api.server, api.token, ids).await
+            }
+        },
+        Command::Config { command } => match command {
+            ConfigCommand::Get { key, api } => {
+                commands::config::get(api.server, api.token, key).await
+            }
+            ConfigCommand::Set { key, value, api } => {
+                commands::config::set(api.server, api.token, key, value).await
+            }
+        },
     };
 
     if let Err(e) = result {

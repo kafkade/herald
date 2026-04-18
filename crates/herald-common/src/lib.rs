@@ -1,6 +1,8 @@
+pub mod color_markup;
 pub mod countdown;
 pub mod types;
 
+pub use color_markup::*;
 pub use countdown::render_countdown_grid;
 pub use types::*;
 

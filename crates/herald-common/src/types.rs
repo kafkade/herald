@@ -431,13 +431,13 @@ pub struct UpdateCountdownRequest {
 }
 
 /// Request body for PUT /api/queue/reorder.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ReorderQueueRequest {
     pub order: Vec<Uuid>,
 }
 
 /// Request body for PUT /api/config.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateConfigRequest {
     #[serde(flatten)]
     pub values: serde_json::Map<String, serde_json::Value>,
@@ -453,7 +453,7 @@ pub struct ListResponse<T: Serialize> {
 }
 
 /// Queue list response with rotation info.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct QueueListResponse {
     pub items: Vec<QueueItem>,
     pub total: usize,
