@@ -1,5 +1,5 @@
 ---
-name: prep-pr
+name: pr-ready
 description: >
   Prepare a pull request description and update the changelog — but never
   create the PR itself. Generates a PR description using the repo's template,
