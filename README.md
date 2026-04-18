@@ -1,5 +1,7 @@
 # Herald
 
+[![CI](https://github.com/kafkade/herald/actions/workflows/ci.yml/badge.svg)](https://github.com/kafkade/herald/actions/workflows/ci.yml)
+
 **A split-flap message board for your terminal and browser.**
 
 Herald is an open-source, split-flap / Vestaboard-style digital message board and countdown tracker built entirely in Rust. Inspired by the iconic departure boards in train stations — where letters and symbols mechanically flip into place — Herald brings that aesthetic to both the terminal and the web browser, backed by a real-time server.

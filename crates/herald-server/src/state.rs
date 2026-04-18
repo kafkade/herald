@@ -156,6 +156,12 @@ impl AppState {
         }
     }
 
+    /// Broadcast a message to all connected WebSocket clients.
+    pub fn broadcast(&self, msg: ServerMessage) {
+        // Ignore send errors — they just mean no receivers are connected
+        let _ = self.inner.broadcast_tx.send(msg);
+    }
+
     /// Signal the rotation task to reset its timer and re-read the interval.
     /// Call this after config changes or queue mutations.
     pub fn reset_rotation_timer(&self) {
