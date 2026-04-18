@@ -3,7 +3,8 @@ mod components;
 mod ws;
 
 use admin::AdminPanel;
-use components::Board;
+use components::{Board, SoundEngine};
+use herald_common::ThemeKind;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use ws::WebSocketState;
@@ -53,14 +54,100 @@ fn App() -> impl IntoView {
 /// The board viewer page (existing functionality).
 #[component]
 fn BoardView() -> impl IntoView {
-    let ws_state = ws::use_websocket();
+    let sound = SoundEngine::new();
+    let ws_state = ws::use_websocket(sound.clone());
+
+    let ws_for_theme = ws_state.clone();
+    let ws_for_style = ws_state.clone();
 
     view! {
-        <div class="herald-board" role="img" aria-label="Herald message board">
+        <div
+            class="herald-board"
+            role="img"
+            aria-label="Herald message board"
+            attr:data-theme=move || theme_attr(&ws_for_theme)
+            style=move || theme_custom_style(&ws_for_style)
+        >
             <Board ws_state=ws_state.clone() />
         </div>
+        <SoundToggle sound=sound />
         <StatusBar ws_state=ws_state />
     }
+}
+
+/// Map theme to data-theme attribute value.
+fn theme_attr(ws: &WebSocketState) -> String {
+    match ws.theme.get() {
+        ThemeKind::Classic => "classic".to_string(),
+        ThemeKind::Dark => "dark".to_string(),
+        ThemeKind::Custom => "custom".to_string(),
+    }
+}
+
+/// Generate inline CSS custom properties for custom theme colors.
+fn theme_custom_style(ws: &WebSocketState) -> String {
+    if ws.theme.get() != ThemeKind::Custom {
+        return String::new();
+    }
+
+    let colors = ws.theme_colors.get();
+    let colors = match colors.as_ref() {
+        Some(c) => c,
+        None => return String::new(),
+    };
+
+    let mut style = String::new();
+    if let Some(bg) = &colors.board_bg {
+        style.push_str(&format!("--board-bg:{bg};--body-bg:{bg};"));
+    }
+    if let Some(tile) = &colors.tile_bg {
+        style.push_str(&format!("--tile-top-bg:{tile};--tile-bottom-bg:{tile};"));
+    }
+    if let Some(ch) = &colors.char_color {
+        style.push_str(&format!("--tile-char-color:{ch};"));
+    }
+    style
+}
+
+/// Sound mute/unmute toggle button (bottom-left corner).
+#[component]
+fn SoundToggle(sound: SoundEngine) -> impl IntoView {
+    if !sound.supported {
+        return view! {}.into_any();
+    }
+
+    let on_click = {
+        let sound = sound.clone();
+        move |_| sound.toggle()
+    };
+
+    let icon = move || {
+        if sound.enabled.get() {
+            "\u{1F50A}" // 🔊
+        } else {
+            "\u{1F507}" // 🔇
+        }
+    };
+
+    let label = move || {
+        if sound.enabled.get() {
+            "Mute flip sound"
+        } else {
+            "Enable flip sound"
+        }
+    };
+
+    view! {
+        <button
+            class="sound-toggle"
+            on:click=on_click
+            aria-label=label
+            title=label
+        >
+            {icon}
+        </button>
+    }
+    .into_any()
 }
 
 /// Fixed-position connection status indicator (bottom-right).

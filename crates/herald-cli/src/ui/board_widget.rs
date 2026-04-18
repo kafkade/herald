@@ -1,4 +1,4 @@
-use herald_common::{BOARD_COLS, BOARD_ROWS, CellContent, Color};
+use herald_common::{BOARD_COLS, BOARD_ROWS, CellContent, Color, ThemeKind};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Position, Rect},
@@ -67,11 +67,28 @@ fn supports_256_colors() -> bool {
 /// A ratatui widget that renders the Herald 6×22 board grid with box-drawing borders.
 pub struct BoardWidget<'a> {
     display: &'a DisplayGrid,
+    theme: &'a ThemeKind,
 }
 
 impl<'a> BoardWidget<'a> {
-    pub fn new(display: &'a DisplayGrid) -> Self {
-        Self { display }
+    pub fn new(display: &'a DisplayGrid, theme: &'a ThemeKind) -> Self {
+        Self { display, theme }
+    }
+
+    /// Get the character foreground color based on the active theme.
+    fn char_color(&self) -> RatatuiColor {
+        match self.theme {
+            ThemeKind::Classic => RatatuiColor::Indexed(220), // warm yellow
+            ThemeKind::Dark | ThemeKind::Custom => RatatuiColor::Reset, // terminal default (white)
+        }
+    }
+
+    /// Get the border/grid line color based on the active theme.
+    fn border_color(&self) -> RatatuiColor {
+        match self.theme {
+            ThemeKind::Classic => RatatuiColor::Indexed(238), // dark gray
+            ThemeKind::Dark | ThemeKind::Custom => RatatuiColor::Reset,
+        }
     }
 }
 
@@ -94,6 +111,9 @@ impl<'a> Widget for BoardWidget<'a> {
         let x_offset = area.x + (area.width.saturating_sub(GRID_WIDTH)) / 2;
         let y_offset = area.y + (area.height.saturating_sub(GRID_HEIGHT)) / 2;
 
+        let border_style = Style::default().fg(self.border_color());
+        let char_style = Style::default().fg(self.char_color());
+
         // ── Draw horizontal border rows ──────────────────────────────
         for row in 0..=BOARD_ROWS as u16 {
             let y = y_offset + row * 2;
@@ -114,14 +134,14 @@ impl<'a> Widget for BoardWidget<'a> {
                 };
 
                 if let Some(cell) = buf.cell_mut(Position::new(x, y)) {
-                    cell.set_char(junction);
+                    cell.set_char(junction).set_style(border_style);
                 }
 
                 // Horizontal dashes after the junction (except at last column)
                 if col < BOARD_COLS as u16 {
                     for dx in 1..=CELL_WIDTH {
                         if let Some(cell) = buf.cell_mut(Position::new(x + dx, y)) {
-                            cell.set_char('─');
+                            cell.set_char('─').set_style(border_style);
                         }
                     }
                 }
@@ -136,7 +156,7 @@ impl<'a> Widget for BoardWidget<'a> {
             for col in 0..=BOARD_COLS as u16 {
                 let x = x_offset + col * (CELL_WIDTH + 1);
                 if let Some(cell) = buf.cell_mut(Position::new(x, y)) {
-                    cell.set_char('│');
+                    cell.set_char('│').set_style(border_style);
                 }
             }
 
@@ -154,7 +174,7 @@ impl<'a> Widget for BoardWidget<'a> {
                                 if let Some(cell) =
                                     buf.cell_mut(Position::new(x_start + dx as u16, y))
                                 {
-                                    cell.set_char(*ch);
+                                    cell.set_char(*ch).set_style(char_style);
                                 }
                             }
                         }
@@ -229,10 +249,15 @@ mod tests {
         DisplayGrid::from_board_state(&BoardState::default())
     }
 
+    fn default_theme() -> ThemeKind {
+        ThemeKind::Dark
+    }
+
     #[test]
     fn too_small_shows_warning() {
         let dg = blank_display();
-        let widget = BoardWidget::new(&dg);
+        let theme = default_theme();
+        let widget = BoardWidget::new(&dg, &theme);
         let area = Rect::new(0, 0, 40, 5);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -252,7 +277,8 @@ mod tests {
     #[test]
     fn renders_corners() {
         let dg = blank_display();
-        let widget = BoardWidget::new(&dg);
+        let theme = default_theme();
+        let widget = BoardWidget::new(&dg, &theme);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -280,7 +306,8 @@ mod tests {
     fn renders_char_cell() {
         let mut dg = blank_display();
         dg.cells[0][0] = CellDisplayState::Normal(CellContent::Char('H'));
-        let widget = BoardWidget::new(&dg);
+        let theme = default_theme();
+        let widget = BoardWidget::new(&dg, &theme);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -295,7 +322,8 @@ mod tests {
     fn renders_color_cell_background() {
         let mut dg = blank_display();
         dg.cells[0][0] = CellDisplayState::Normal(CellContent::Color(Color::Red));
-        let widget = BoardWidget::new(&dg);
+        let theme = default_theme();
+        let widget = BoardWidget::new(&dg, &theme);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -309,7 +337,8 @@ mod tests {
     fn renders_white_color_cell_with_dark_foreground() {
         let mut dg = blank_display();
         dg.cells[0][0] = CellDisplayState::Normal(CellContent::Color(Color::White));
-        let widget = BoardWidget::new(&dg);
+        let theme = default_theme();
+        let widget = BoardWidget::new(&dg, &theme);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -323,7 +352,8 @@ mod tests {
     fn renders_black_color_cell_with_white_foreground() {
         let mut dg = blank_display();
         dg.cells[0][0] = CellDisplayState::Normal(CellContent::Color(Color::Black));
-        let widget = BoardWidget::new(&dg);
+        let theme = default_theme();
+        let widget = BoardWidget::new(&dg, &theme);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
@@ -337,7 +367,8 @@ mod tests {
     fn renders_flipping_cell() {
         let mut dg = blank_display();
         dg.cells[0][0] = CellDisplayState::Flipping('A');
-        let widget = BoardWidget::new(&dg);
+        let theme = default_theme();
+        let widget = BoardWidget::new(&dg, &theme);
         let area = Rect::new(0, 0, GRID_WIDTH, GRID_HEIGHT);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);

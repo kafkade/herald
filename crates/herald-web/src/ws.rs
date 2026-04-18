@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::components::SoundEngine;
 use futures::StreamExt;
 use gloo_net::websocket::{Message, futures::WebSocket};
 use gloo_timers::future::TimeoutFuture;
-use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent, ServerMessage};
+use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent, ServerMessage, ThemeKind};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -23,6 +24,12 @@ pub struct WebSocketState {
     pub has_received_update: RwSignal<bool>,
     /// Trigger signal that increments on each board update (used to start animations)
     pub update_counter: RwSignal<u64>,
+    /// Columns that changed in the most recent board update (for sound effects)
+    pub changed_cols: RwSignal<Vec<usize>>,
+    /// Current board theme
+    pub theme: RwSignal<ThemeKind>,
+    /// Custom theme colors (only populated when theme is Custom)
+    pub theme_colors: RwSignal<Option<herald_common::ThemeColors>>,
 }
 
 /// Derive the WebSocket URL from the current page location.
@@ -37,7 +44,7 @@ fn ws_url() -> String {
 
 /// Create and manage a WebSocket connection with reconnection logic.
 /// Returns reactive state that updates when board state changes.
-pub fn use_websocket() -> WebSocketState {
+pub fn use_websocket(sound: SoundEngine) -> WebSocketState {
     let grid: Vec<Vec<RwSignal<CellContent>>> = (0..BOARD_ROWS)
         .map(|_| {
             (0..BOARD_COLS)
@@ -57,6 +64,9 @@ pub fn use_websocket() -> WebSocketState {
     let connected = RwSignal::new(false);
     let has_received_update = RwSignal::new(false);
     let update_counter = RwSignal::new(0u64);
+    let changed_cols = RwSignal::new(Vec::new());
+    let theme = RwSignal::new(ThemeKind::default());
+    let theme_colors = RwSignal::new(None);
 
     let state = WebSocketState {
         grid,
@@ -64,10 +74,13 @@ pub fn use_websocket() -> WebSocketState {
         connected,
         has_received_update,
         update_counter,
+        changed_cols,
+        theme,
+        theme_colors,
     };
 
     let state_clone = state.clone();
-    let batcher = RafBatcher::new(state_clone);
+    let batcher = RafBatcher::new(state_clone, sound);
     spawn_local(async move {
         connection_loop(batcher).await;
     });
@@ -84,14 +97,16 @@ struct RafBatcher {
     pending: Rc<RefCell<Option<BoardState>>>,
     raf_scheduled: Rc<RefCell<bool>>,
     state: WebSocketState,
+    sound: SoundEngine,
 }
 
 impl RafBatcher {
-    fn new(state: WebSocketState) -> Self {
+    fn new(state: WebSocketState, sound: SoundEngine) -> Self {
         Self {
             pending: Rc::new(RefCell::new(None)),
             raf_scheduled: Rc::new(RefCell::new(false)),
             state,
+            sound,
         }
     }
 
@@ -105,11 +120,17 @@ impl RafBatcher {
             let pending = Rc::clone(&self.pending);
             let raf_scheduled = Rc::clone(&self.raf_scheduled);
             let state = self.state.clone();
+            let sound = self.sound.clone();
 
             let closure = Closure::once(move || {
                 *raf_scheduled.borrow_mut() = false;
                 if let Some(board_state) = pending.borrow_mut().take() {
                     apply_board_update(&board_state, &state);
+                    // Trigger sound for changed columns
+                    let cols = state.changed_cols.get_untracked();
+                    if !cols.is_empty() {
+                        sound.play_cascade(&cols);
+                    }
                 }
             });
 
@@ -200,6 +221,25 @@ fn handle_message(text: &str, batcher: &RafBatcher) {
 
 /// Apply a board update to the reactive grid signals.
 fn apply_board_update(board_state: &BoardState, state: &WebSocketState) {
+    // Compute changed columns for sound by comparing current client display with new grid.
+    // Only compute if we've already received at least one update (suppress initial/reconnect).
+    let already_received = state.has_received_update.get_untracked();
+    if already_received {
+        let mut cols = Vec::new();
+        for col in 0..BOARD_COLS {
+            for row in 0..BOARD_ROWS {
+                let current = state.grid[row][col].get_untracked();
+                if current != board_state.grid.0[row][col] {
+                    cols.push(col);
+                    break;
+                }
+            }
+        }
+        state.changed_cols.set(cols);
+    } else {
+        state.changed_cols.set(vec![]);
+    }
+
     // Copy current grid to previous_grid signals before updating
     for row in 0..BOARD_ROWS {
         for col in 0..BOARD_COLS {
@@ -215,6 +255,10 @@ fn apply_board_update(board_state: &BoardState, state: &WebSocketState) {
             state.grid[row][col].set(new_cell);
         }
     }
+
+    // Update theme
+    state.theme.set(board_state.theme.clone());
+    state.theme_colors.set(board_state.theme_colors.clone());
 
     // Mark that we've received at least one update
     if !state.has_received_update.get_untracked() {

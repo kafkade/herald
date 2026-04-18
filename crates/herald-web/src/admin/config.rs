@@ -55,6 +55,12 @@ const CONFIG_FIELDS: &[ConfigField] = &[
         description: "What happens when a countdown reaches zero",
         input_type: InputType::Select(&["show_zero", "remove", "pause"]),
     },
+    ConfigField {
+        key: "theme",
+        label: "Board Theme",
+        description: "Visual theme for the board display",
+        input_type: InputType::Select(&["dark", "classic", "custom"]),
+    },
 ];
 
 fn get_value_str(map: &serde_json::Map<String, serde_json::Value>, key: &str) -> String {

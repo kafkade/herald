@@ -98,12 +98,14 @@ async fn run_tui(
     // Animation state — pre-allocate the display buffer once and reuse it
     let mut current_display = DisplayGrid::from_board_state(&board_rx.borrow());
     let mut animation: Option<BoardAnimation> = None;
+    let mut current_theme = board_rx.borrow().theme.clone();
 
     // Frame skip: track when we last rendered to avoid catching up
     let mut last_frame_time = Instant::now();
 
     let draw = |frame: &mut ratatui::Frame,
                 display: &DisplayGrid,
+                theme: &herald_common::ThemeKind,
                 conn_state: &crate::ws_client::ConnectionState,
                 queue_info: &crate::ws_client::QueueInfoState,
                 server_url: &str,
@@ -111,7 +113,7 @@ async fn run_tui(
         let area = frame.area();
         let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
-        frame.render_widget(BoardWidget::new(display), chunks[0]);
+        frame.render_widget(BoardWidget::new(display, theme), chunks[0]);
         frame.render_widget(
             StatusBar::new(conn_state, server_url, last_update, queue_info),
             chunks[1],
@@ -125,6 +127,7 @@ async fn run_tui(
         draw(
             frame,
             &current_display,
+            &current_theme,
             &conn_state,
             &queue_info,
             server_url,
@@ -153,6 +156,7 @@ async fn run_tui(
                 }
                 last_update = Some(Instant::now());
                 let new_board = board_rx.borrow().clone();
+                current_theme = new_board.theme.clone();
 
                 if speed == AnimationSpeed::Off {
                     // Instant transition — skip animation entirely
@@ -190,21 +194,21 @@ async fn run_tui(
                 let conn_state = conn_rx.borrow().clone();
                 let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
-                    draw(frame, &current_display, &conn_state, &queue_info, server_url, last_update);
+                    draw(frame, &current_display, &current_theme, &conn_state, &queue_info, server_url, last_update);
                 })?;
             }
             _ = conn_rx.changed() => {
                 let conn_state = conn_rx.borrow().clone();
                 let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
-                    draw(frame, &current_display, &conn_state, &queue_info, server_url, last_update);
+                    draw(frame, &current_display, &current_theme, &conn_state, &queue_info, server_url, last_update);
                 })?;
             }
             _ = queue_rx.changed() => {
                 let conn_state = conn_rx.borrow().clone();
                 let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
-                    draw(frame, &current_display, &conn_state, &queue_info, server_url, last_update);
+                    draw(frame, &current_display, &current_theme, &conn_state, &queue_info, server_url, last_update);
                 })?;
             }
             _ = tokio::time::sleep(tick_duration) => {
@@ -229,7 +233,7 @@ async fn run_tui(
                 let conn_state = conn_rx.borrow().clone();
                 let queue_info = queue_rx.borrow().clone();
                 terminal.draw(|frame| {
-                    draw(frame, &current_display, &conn_state, &queue_info, server_url, last_update);
+                    draw(frame, &current_display, &current_theme, &conn_state, &queue_info, server_url, last_update);
                 })?;
 
                 while event::poll(Duration::from_millis(0))? {
@@ -259,7 +263,7 @@ async fn run_tui(
                             let conn_state = conn_rx.borrow().clone();
                             let queue_info = queue_rx.borrow().clone();
                             terminal.draw(|frame| {
-                                draw(frame, &current_display, &conn_state, &queue_info, server_url, last_update);
+                                draw(frame, &current_display, &current_theme, &conn_state, &queue_info, server_url, last_update);
                             })?;
                         }
                         _ => {}

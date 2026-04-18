@@ -64,6 +64,7 @@ Pushing a `v*` tag triggers the **Release** workflow which:
 3. Extracts release notes from CHANGELOG.md
 4. Creates a GitHub Release with all artifacts attached
 5. Marks `0.x.y` releases as pre-release automatically
+6. Builds and pushes a Docker image to `ghcr.io/kafkade/herald` tagged with the version (e.g. `0.5.2`, `0.5`)
 
 ### 5. Verify
 
@@ -87,3 +88,4 @@ Each release includes:
 | `herald-server-vX.Y.Z-<target>.tar.gz` | Binary archive (Linux/macOS) |
 | `herald-server-vX.Y.Z-<target>.zip` | Binary archive (Windows) |
 | `herald-server-vX.Y.Z-<target>.*.sha256` | SHA-256 checksum |
+| `ghcr.io/kafkade/herald:X.Y.Z` | Docker image (linux/amd64) |
