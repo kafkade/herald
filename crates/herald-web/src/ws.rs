@@ -1,8 +1,13 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use futures::StreamExt;
 use gloo_net::websocket::{Message, futures::WebSocket};
 use gloo_timers::future::TimeoutFuture;
 use herald_common::{BOARD_COLS, BOARD_ROWS, BoardState, CellContent, ServerMessage};
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 /// State exposed from the WebSocket connection to UI components.
@@ -62,15 +67,65 @@ pub fn use_websocket() -> WebSocketState {
     };
 
     let state_clone = state.clone();
+    let batcher = RafBatcher::new(state_clone);
     spawn_local(async move {
-        connection_loop(state_clone).await;
+        connection_loop(batcher).await;
     });
 
     state
 }
 
+/// Batches board updates into a single `requestAnimationFrame` callback.
+///
+/// If multiple `BoardUpdate` messages arrive within the same animation frame,
+/// only the latest state is applied — earlier intermediate states are dropped.
+/// This is app-lifetime and outlives reconnect cycles.
+struct RafBatcher {
+    pending: Rc<RefCell<Option<BoardState>>>,
+    raf_scheduled: Rc<RefCell<bool>>,
+    state: WebSocketState,
+}
+
+impl RafBatcher {
+    fn new(state: WebSocketState) -> Self {
+        Self {
+            pending: Rc::new(RefCell::new(None)),
+            raf_scheduled: Rc::new(RefCell::new(false)),
+            state,
+        }
+    }
+
+    /// Queue a board update to be applied on the next animation frame.
+    fn schedule_update(&self, board_state: BoardState) {
+        *self.pending.borrow_mut() = Some(board_state);
+
+        if !*self.raf_scheduled.borrow() {
+            *self.raf_scheduled.borrow_mut() = true;
+
+            let pending = Rc::clone(&self.pending);
+            let raf_scheduled = Rc::clone(&self.raf_scheduled);
+            let state = self.state.clone();
+
+            let closure = Closure::once(move || {
+                *raf_scheduled.borrow_mut() = false;
+                if let Some(board_state) = pending.borrow_mut().take() {
+                    apply_board_update(&board_state, &state);
+                }
+            });
+
+            web_sys::window()
+                .expect("no window")
+                .request_animation_frame(closure.as_ref().unchecked_ref())
+                .expect("requestAnimationFrame failed");
+
+            closure.forget();
+        }
+    }
+}
+
 /// Reconnection loop with exponential backoff.
-async fn connection_loop(state: WebSocketState) {
+/// The `RafBatcher` is created once and reused across reconnect cycles.
+async fn connection_loop(batcher: RafBatcher) {
     let mut attempt: u32 = 0;
 
     loop {
@@ -80,7 +135,7 @@ async fn connection_loop(state: WebSocketState) {
         match WebSocket::open(&url) {
             Ok(ws) => {
                 attempt = 0;
-                state.connected.set(true);
+                batcher.state.connected.set(true);
                 log::info!("WebSocket connected");
 
                 let (_write, mut read) = ws.split();
@@ -88,11 +143,11 @@ async fn connection_loop(state: WebSocketState) {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            handle_message(&text, &state);
+                            handle_message(&text, &batcher);
                         }
                         Ok(Message::Bytes(bytes)) => {
                             if let Ok(text) = String::from_utf8(bytes) {
-                                handle_message(&text, &state);
+                                handle_message(&text, &batcher);
                             }
                         }
                         Err(e) => {
@@ -102,12 +157,12 @@ async fn connection_loop(state: WebSocketState) {
                     }
                 }
 
-                state.connected.set(false);
+                batcher.state.connected.set(false);
                 log::warn!("WebSocket disconnected");
             }
             Err(e) => {
                 log::error!("WebSocket connection failed: {e:?}");
-                state.connected.set(false);
+                batcher.state.connected.set(false);
             }
         }
 
@@ -120,10 +175,10 @@ async fn connection_loop(state: WebSocketState) {
 }
 
 /// Process a single incoming server message.
-fn handle_message(text: &str, state: &WebSocketState) {
+fn handle_message(text: &str, batcher: &RafBatcher) {
     match serde_json::from_str::<ServerMessage>(text) {
         Ok(ServerMessage::BoardUpdate(board_state)) => {
-            apply_board_update(&board_state, state);
+            batcher.schedule_update(board_state);
         }
         Ok(ServerMessage::Heartbeat { .. }) => {
             log::trace!("Heartbeat received");
