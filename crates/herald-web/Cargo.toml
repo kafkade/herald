@@ -8,6 +8,7 @@ description = "Web viewer for the Herald split-flap message board"
 [dependencies]
 herald-common = { workspace = true }
 uuid = { workspace = true, features = ["js"] }
+chrono = { workspace = true }
 leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

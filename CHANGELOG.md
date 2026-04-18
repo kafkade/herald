@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `herald queue list` and `herald queue reorder` subcommands for viewing and reordering the display queue
 - `herald config get` and `herald config set` subcommands for viewing and updating server configuration
 - Color markup parser in `herald-common` supporting `{red}text{/red}` syntax for all 8 Vestaboard colors, with nested tag and shorthand `{}` close support
+- `--preview` flag for `herald push` that renders a 6×22 ASCII grid preview in the terminal before pushing, with interactive Y/n confirmation
+- Web admin panel at `/admin` with bearer token authentication, localStorage persistence, and automatic re-login on 401 responses
+- Web message composer in the admin panel with live 6×22 grid preview, alignment selector, optional expiry picker, and push-to-server functionality
+- Web countdown manager in the admin panel with create form, live remaining-time display, and delete with confirmation
+- Web queue manager in the admin panel with drag-to-reorder, current item highlighting, and auto-refresh
 
 ### Changed
 

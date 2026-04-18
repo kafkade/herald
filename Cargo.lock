@@ -1152,6 +1152,7 @@ dependencies = [
 name = "herald-web"
 version = "0.5.2"
 dependencies = [
+ "chrono",
  "console_error_panic_hook",
  "console_log",
  "futures",
