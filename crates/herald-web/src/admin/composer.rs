@@ -13,6 +13,7 @@ pub fn MessageComposer() -> impl IntoView {
     let align = RwSignal::new("center".to_string());
     let template = RwSignal::new(String::new());
     let expires = RwSignal::new(String::new());
+    let display_at = RwSignal::new(String::new());
     let toast = RwSignal::new(Option::<(String, bool)>::None);
     let is_submitting = RwSignal::new(false);
 
@@ -76,6 +77,17 @@ pub fn MessageComposer() -> impl IntoView {
             }
         };
 
+        let display_at_value = {
+            let val = display_at.get_untracked();
+            if val.is_empty() {
+                None
+            } else {
+                chrono::NaiveDateTime::parse_from_str(&val, "%Y-%m-%dT%H:%M")
+                    .ok()
+                    .map(|ndt| ndt.and_utc())
+            }
+        };
+
         let request = CreateMessageRequest {
             text: Some(t),
             grid: None,
@@ -84,6 +96,7 @@ pub fn MessageComposer() -> impl IntoView {
             queue_position: None,
             expires_at,
             template: template_value,
+            display_at: display_at_value,
         };
 
         wasm_bindgen_futures::spawn_local(async move {
@@ -93,6 +106,7 @@ pub fn MessageComposer() -> impl IntoView {
                     text.set(String::new());
                     template.set(String::new());
                     expires.set(String::new());
+                    display_at.set(String::new());
                 }
                 Err(e) => {
                     if e.contains("401") {
@@ -172,6 +186,16 @@ pub fn MessageComposer() -> impl IntoView {
                             }
                         />
                     </div>
+                </div>
+
+                <div class="composer-input-group">
+                    <label class="composer-label">"Schedule"</label>
+                    <input
+                        type="datetime-local"
+                        class="composer-datetime"
+                        prop:value=move || display_at.get()
+                        on:input=move |ev| display_at.set(event_target_value(&ev))
+                    />
                 </div>
 
                 <button

@@ -4,6 +4,8 @@ pub mod countdowns;
 pub mod health;
 pub mod messages;
 pub mod queue;
+pub mod rate_limit;
+pub mod stats;
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -24,6 +26,9 @@ pub enum ApiError {
 
     #[error("internal error: {0}")]
     Internal(String),
+
+    #[error("too many requests")]
+    TooManyRequests,
 }
 
 impl From<sqlx::Error> for ApiError {
@@ -48,6 +53,17 @@ impl IntoResponse for ApiError {
                 "internal_error",
                 msg.clone(),
             ),
+            ApiError::TooManyRequests => {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    [("retry-after", "60")],
+                    Json(ErrorResponse {
+                        error: "too_many_requests".to_string(),
+                        message: "rate limit exceeded — try again later".to_string(),
+                    }),
+                )
+                    .into_response();
+            }
         };
 
         let body = Json(ErrorResponse {

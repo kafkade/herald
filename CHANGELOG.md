@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Configurable API rate limiting — 60 requests/minute for admin endpoints, 10 requests/minute for health, with `429 Too Many Requests` response and `Retry-After` header (WebSocket endpoint exempt)
+- `rate_limit_per_minute` server config key for customizing the admin rate limit (default: 60)
+- `GET /api/stats` endpoint returning connected viewer count, server uptime, total messages, and total countdowns
+- `herald stats` CLI subcommand displaying server statistics with human-readable uptime formatting
+- Live viewer count badge ("👁 N viewers") in the web admin panel header, auto-refreshing every 10 seconds
+- Message scheduling via optional `display_at` field — scheduled messages are added to the queue but skipped by the rotation engine until their display time arrives
+- `--display-at` flag on `herald push` for scheduling messages (ISO-8601 datetime format)
+- "Schedule" datetime picker in the web message composer for scheduling messages from the admin panel
+- Background task that detects and activates scheduled messages when their display time arrives
 - Optional mechanical "clack" sound effect on web tile flips using the Web Audio API — programmatic noise-burst synthesis with band-pass filter, staggered per-column to match the visual cascade
 - Mute/unmute toggle button (🔊/🔇) in the bottom-left corner of the web viewer — persists preference in `localStorage`, keyboard-focusable with `aria-label`, respects `prefers-reduced-motion`
 - Board theme system with three built-in themes: **Classic** (black background, warm yellow text), **Dark** (dark gray background, white text — default), and **Custom** (user-defined hex colors via config)

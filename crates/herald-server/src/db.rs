@@ -34,10 +34,11 @@ pub async fn create_message(pool: &SqlitePool, msg: &Message) -> Result<(), sqlx
     let id = msg.id.to_string();
     let created = msg.created_at.to_rfc3339();
     let expires = msg.expires_at.map(|d| d.to_rfc3339());
+    let display_at = msg.display_at.map(|d| d.to_rfc3339());
 
     sqlx::query(
-        "INSERT INTO messages (id, grid, source_text, h_align, v_align, queue_position, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, grid, source_text, h_align, v_align, queue_position, created_at, expires_at, display_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&grid_json)
@@ -47,6 +48,7 @@ pub async fn create_message(pool: &SqlitePool, msg: &Message) -> Result<(), sqlx
     .bind(msg.queue_position)
     .bind(&created)
     .bind(&expires)
+    .bind(&display_at)
     .execute(pool)
     .await?;
 
@@ -116,6 +118,16 @@ pub async fn update_message(
             }
         }
     }
+    if let Some(ref da) = req.display_at {
+        sets.push("display_at = ?");
+        match da {
+            Some(d) => values.push(d.to_rfc3339()),
+            None => {
+                null_indices.push(values.len());
+                values.push(String::new());
+            }
+        }
+    }
 
     if sets.is_empty() {
         return Ok(true); // nothing to update
@@ -153,6 +165,7 @@ fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> Message {
     let v_align_str: String = row.get("v_align");
     let created_str: String = row.get("created_at");
     let expires_str: Option<String> = row.get("expires_at");
+    let display_at_str: Option<String> = row.get("display_at");
 
     Message {
         id: uuid::Uuid::parse_str(&id_str).unwrap(),
@@ -165,6 +178,11 @@ fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> Message {
             .unwrap()
             .with_timezone(&chrono::Utc),
         expires_at: expires_str.map(|s| {
+            chrono::DateTime::parse_from_rfc3339(&s)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+        }),
+        display_at: display_at_str.map(|s| {
             chrono::DateTime::parse_from_rfc3339(&s)
                 .unwrap()
                 .with_timezone(&chrono::Utc)
@@ -293,7 +311,7 @@ fn row_to_countdown(row: &sqlx::sqlite::SqliteRow) -> Countdown {
 pub async fn get_queue(pool: &SqlitePool) -> Result<Vec<QueueItem>, sqlx::Error> {
     // Messages contribute queue items
     let msg_rows = sqlx::query(
-        "SELECT id, queue_position, created_at, expires_at, grid FROM messages WHERE deleted_at IS NULL ORDER BY queue_position ASC, created_at ASC",
+        "SELECT id, queue_position, created_at, expires_at, display_at, grid FROM messages WHERE deleted_at IS NULL ORDER BY queue_position ASC, created_at ASC",
     )
     .fetch_all(pool)
     .await?;
@@ -310,6 +328,7 @@ pub async fn get_queue(pool: &SqlitePool) -> Result<Vec<QueueItem>, sqlx::Error>
         let id_str: String = row.get("id");
         let grid_json: String = row.get("grid");
         let expires_str: Option<String> = row.get("expires_at");
+        let display_at_str: Option<String> = row.get("display_at");
 
         // Derive a label from the grid content (first non-blank chars)
         let label = derive_message_label(&grid_json);
@@ -320,6 +339,11 @@ pub async fn get_queue(pool: &SqlitePool) -> Result<Vec<QueueItem>, sqlx::Error>
             label,
             queue_position: row.get("queue_position"),
             expires_at: expires_str.map(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s)
+                    .unwrap()
+                    .with_timezone(&chrono::Utc)
+            }),
+            display_at: display_at_str.map(|s| {
                 chrono::DateTime::parse_from_rfc3339(&s)
                     .unwrap()
                     .with_timezone(&chrono::Utc)
@@ -335,6 +359,7 @@ pub async fn get_queue(pool: &SqlitePool) -> Result<Vec<QueueItem>, sqlx::Error>
             label: row.get("label"),
             queue_position: row.get("queue_position"),
             expires_at: None,
+            display_at: None,
         });
     }
 
@@ -345,6 +370,22 @@ pub async fn get_queue(pool: &SqlitePool) -> Result<Vec<QueueItem>, sqlx::Error>
     });
 
     Ok(items)
+}
+
+/// Build a displayable queue that excludes messages scheduled for the future.
+/// Used by `build_board_state` and the rotation engine.
+pub async fn get_displayable_queue(pool: &SqlitePool) -> Result<Vec<QueueItem>, sqlx::Error> {
+    let items = get_queue(pool).await?;
+    let now = chrono::Utc::now();
+    Ok(items
+        .into_iter()
+        .filter(|item| {
+            match item.display_at {
+                Some(dt) if dt > now => false, // scheduled for the future — skip
+                _ => true,
+            }
+        })
+        .collect())
 }
 
 /// Extract readable text from a grid JSON for queue labels.
@@ -494,7 +535,7 @@ pub async fn queue_size(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
 
 /// Build the current board state from the queue and rotation state.
 pub async fn build_board_state(pool: &SqlitePool) -> Result<BoardState, sqlx::Error> {
-    let queue = get_queue(pool).await?;
+    let queue = get_displayable_queue(pool).await?;
     let current_idx = get_current_index(pool).await?;
 
     if queue.is_empty() {
@@ -601,6 +642,21 @@ pub async fn get_rotation_interval(pool: &SqlitePool) -> Result<u64, sqlx::Error
     }
 }
 
+/// Read the admin rate limit from the config table. Defaults to 60 requests/minute.
+pub async fn get_rate_limit_per_minute(pool: &SqlitePool) -> Result<u32, sqlx::Error> {
+    let row = sqlx::query("SELECT value FROM configuration WHERE key = 'rate_limit_per_minute'")
+        .fetch_optional(pool)
+        .await?;
+
+    match row {
+        Some(row) => {
+            let value: String = row.get("value");
+            Ok(value.parse::<u32>().unwrap_or(60))
+        }
+        None => Ok(60),
+    }
+}
+
 // ── Expiry-aware rotation ───────────────────────────────────────────
 
 /// Soft-delete all messages whose expiry time has passed. Returns the number of expired messages.
@@ -629,9 +685,9 @@ pub async fn soft_delete_countdown(pool: &SqlitePool, id: &str) -> Result<bool, 
 }
 
 /// Get the current queue item based on the rotation index.
-/// Returns None if the queue is empty.
+/// Returns None if the displayable queue is empty (excludes scheduled messages).
 pub async fn get_current_queue_item(pool: &SqlitePool) -> Result<Option<QueueItem>, sqlx::Error> {
-    let queue = get_queue(pool).await?;
+    let queue = get_displayable_queue(pool).await?;
     if queue.is_empty() {
         return Ok(None);
     }
@@ -648,6 +704,22 @@ pub async fn update_last_rotation(pool: &SqlitePool) -> Result<(), sqlx::Error> 
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Count all active (non-deleted) messages.
+pub async fn count_messages(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as cnt FROM messages WHERE deleted_at IS NULL")
+        .fetch_one(pool)
+        .await?;
+    Ok(row.get::<i64, _>("cnt") as usize)
+}
+
+/// Count all active (non-deleted) countdowns.
+pub async fn count_countdowns(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as cnt FROM countdowns WHERE deleted_at IS NULL")
+        .fetch_one(pool)
+        .await?;
+    Ok(row.get::<i64, _>("cnt") as usize)
 }
 
 /// Advance the rotation to the next valid (non-expired) queue item.
