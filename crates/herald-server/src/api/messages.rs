@@ -17,8 +17,11 @@ pub async fn create(
     // Resolve grid from text or raw grid (exactly one must be provided)
     let (grid, source_text) = match (req.text, req.grid) {
         (Some(text), None) => {
-            let grid =
-                Grid::from_text(&text, req.h_align, req.v_align).map_err(ApiError::BadRequest)?;
+            let grid = if let Some(template) = req.template {
+                Grid::from_template(template, &text).map_err(ApiError::BadRequest)?
+            } else {
+                Grid::from_text(&text, req.h_align, req.v_align).map_err(ApiError::BadRequest)?
+            };
             (grid, Some(text))
         }
         (None, Some(grid)) => {

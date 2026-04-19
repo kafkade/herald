@@ -1,0 +1,29 @@
+# Herald — Caddy Reverse Proxy Configuration
+#
+# Caddy automatically obtains and renews Let's Encrypt TLS certificates
+# for the configured domain — no extra setup required.
+#
+# WebSocket connections are handled transparently by Caddy's reverse_proxy
+# directive; no special upgrade configuration is needed.
+#
+# Usage:
+#   1. Copy this file to /etc/caddy/Caddyfile
+#   2. Replace "herald.example.com" with your actual domain
+#   3. Adjust the upstream port (3000) if you changed HERALD_PORT
+#   4. Reload Caddy:
+#        sudo systemctl reload caddy
+
+# ── Site block ────────────────────────────────────────────────────────
+# Caddy provisions a TLS certificate for this domain automatically.
+# HTTP requests are redirected to HTTPS by default.
+herald.example.com {
+	# ── Compression ───────────────────────────────────────────────────
+	# Enable gzip (and zstd) encoding for responses.
+	encode gzip
+
+	# ── Reverse proxy ─────────────────────────────────────────────────
+	# Forward all requests — including WebSocket upgrades — to Herald.
+	# Caddy automatically sets X-Forwarded-For, X-Forwarded-Proto, and
+	# X-Forwarded-Host headers on proxied requests.
+	reverse_proxy localhost:3000
+}
