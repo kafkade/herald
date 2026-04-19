@@ -58,6 +58,7 @@ async fn main() {
     let state = AppState::new(pool, admin_token);
     herald_server::start_rotation_task(state.clone());
     herald_server::start_cleanup_task(state.clone());
+    herald_server::start_schedule_task(state.clone());
     let app = build_router(state.clone(), web_dir);
 
     // Start server with graceful shutdown

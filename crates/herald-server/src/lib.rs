@@ -6,6 +6,7 @@ pub mod ws;
 use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
+use std::sync::Arc;
 
 use herald_common::{QueueItemKind, ZeroBehavior};
 use state::AppState;
@@ -228,6 +229,41 @@ async fn run_countdown_mode(state: &AppState, interval_secs: u64, item: &herald_
     }
 }
 
+/// Spawn a background task that checks for scheduled messages whose `display_at`
+/// time has arrived. Runs every 30 seconds. When a message becomes active, it
+/// triggers a rotation reset so the board can pick it up.
+pub fn start_schedule_task(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        tracing::info!("Schedule activation task started (30s interval)");
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        interval.tick().await; // consume immediate first tick
+
+        loop {
+            interval.tick().await;
+
+            match db::get_queue(state.pool()).await {
+                Ok(queue) => {
+                    let now = chrono::Utc::now();
+                    let newly_active = queue
+                        .iter()
+                        .any(|item| matches!(item.display_at, Some(dt) if dt <= now));
+
+                    if newly_active {
+                        tracing::info!(
+                            "Schedule: newly active message(s) detected, notifying rotation"
+                        );
+                        state.notify_board_update().await;
+                        state.reset_rotation_timer();
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Schedule: failed to check queue: {e}");
+                }
+            }
+        }
+    })
+}
+
 /// Spawn a periodic cleanup task that soft-expires items every 60 seconds.
 /// If the currently-displayed item expires, resets the rotation timer to trigger an advance.
 pub fn start_cleanup_task(state: AppState) -> tokio::task::JoinHandle<()> {
@@ -283,14 +319,30 @@ pub fn start_cleanup_task(state: AppState) -> tokio::task::JoinHandle<()> {
     })
 }
 
-/// Build the full Axum router with all routes.
+/// Build the full Axum router with all routes using default rate limits.
 ///
 /// When `web_dir` is `Some` and the directory exists, static files from that
 /// directory are served as a fallback for any path that doesn't match an API or
 /// WebSocket route. `index.html` is returned for unknown paths to support SPA
 /// client-side routing.
 pub fn build_router(state: AppState, web_dir: Option<std::path::PathBuf>) -> Router {
-    // Admin routes — protected by bearer token auth
+    build_router_with_limits(state, web_dir, 60, 10)
+}
+
+/// Build the full Axum router with configurable rate limits.
+///
+/// `admin_rpm` controls admin endpoint rate limiting (requests per minute).
+/// `public_rpm` controls public endpoint rate limiting (requests per minute).
+pub fn build_router_with_limits(
+    state: AppState,
+    web_dir: Option<std::path::PathBuf>,
+    admin_rpm: u32,
+    public_rpm: u32,
+) -> Router {
+    let admin_limiter = Arc::new(api::rate_limit::RateLimiter::new(admin_rpm));
+    let public_limiter = Arc::new(api::rate_limit::RateLimiter::new(public_rpm));
+
+    // Admin routes — protected by bearer token auth and rate limiting
     let admin_api = Router::new()
         // Messages
         .route("/messages", post(api::messages::create))
@@ -309,13 +361,24 @@ pub fn build_router(state: AppState, web_dir: Option<std::path::PathBuf>) -> Rou
         // Config
         .route("/config", get(api::config::get))
         .route("/config", put(api::config::update))
+        // Stats
+        .route("/stats", get(api::stats::get))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             api::auth::require_auth,
+        ))
+        .layer(middleware::from_fn_with_state(
+            admin_limiter,
+            api::rate_limit::rate_limit,
         ));
 
-    // Public routes — no auth required
-    let public_api = Router::new().route("/health", get(api::health::health));
+    // Public routes — no auth, separate (lower) rate limit
+    let public_api = Router::new()
+        .route("/health", get(api::health::health))
+        .layer(middleware::from_fn_with_state(
+            public_limiter,
+            api::rate_limit::rate_limit,
+        ));
 
     let mut router = Router::new()
         .nest("/api", admin_api)

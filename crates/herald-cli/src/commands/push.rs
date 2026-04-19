@@ -6,6 +6,7 @@ use herald_common::{
 };
 use std::io::{self, BufRead, IsTerminal, Write};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run(
     text: String,
     server: String,
@@ -13,6 +14,7 @@ pub async fn run(
     align: String,
     expires: Option<String>,
     template: Option<String>,
+    display_at: Option<String>,
     preview: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let h_align = match align.to_lowercase().as_str() {
@@ -34,6 +36,17 @@ pub async fn run(
             })
         })
         .transpose()?;
+
+    let display_at = match display_at {
+        Some(s) => Some(
+            DateTime::parse_from_rfc3339(&s)
+                .map_err(|e| {
+                    format!("Invalid display-at datetime: {e}. Use ISO-8601 format, e.g. 2025-06-01T14:00:00Z")
+                })?
+                .with_timezone(&Utc),
+        ),
+        None => None,
+    };
 
     let template = match template.as_deref() {
         Some("announcement") => Some(MessageTemplate::Announcement),
@@ -59,6 +72,10 @@ pub async fn run(
         print_grid_preview(&grid);
         println!();
 
+        if let Some(dt) = &display_at {
+            println!("Scheduled for: {}", dt.format("%Y-%m-%d %H:%M:%S UTC"));
+        }
+
         if io::stdin().is_terminal() {
             print!("Push this message? [Y/n] ");
             io::stdout().flush()?;
@@ -80,6 +97,7 @@ pub async fn run(
         queue_position: None,
         expires_at,
         template,
+        display_at,
     };
 
     let client = ApiClient::new(&server, &token);

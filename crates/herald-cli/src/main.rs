@@ -54,6 +54,9 @@ enum Command {
         /// Message template (announcement, greeting, countdown, ticker)
         #[arg(long)]
         template: Option<String>,
+        /// Schedule message for future display (ISO-8601 datetime, e.g. "2025-06-01T14:00:00Z")
+        #[arg(long)]
+        display_at: Option<String>,
         /// Preview the message on the board before pushing
         #[arg(long)]
         preview: bool,
@@ -74,6 +77,11 @@ enum Command {
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
+    },
+    /// Show server statistics (connected viewers, uptime, counts)
+    Stats {
+        #[command(flatten)]
+        api: ApiArgs,
     },
 }
 
@@ -162,11 +170,12 @@ async fn main() {
             align,
             expires,
             template,
+            display_at,
             preview,
             api,
         } => {
             commands::push::run(
-                text, api.server, api.token, align, expires, template, preview,
+                text, api.server, api.token, align, expires, template, display_at, preview,
             )
             .await
         }
@@ -201,6 +210,7 @@ async fn main() {
                 commands::config::set(api.server, api.token, key, value).await
             }
         },
+        Command::Stats { api } => commands::stats::run(api.server, api.token).await,
     };
 
     if let Err(e) = result {

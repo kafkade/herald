@@ -311,6 +311,8 @@ pub struct Message {
     pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_at: Option<DateTime<Utc>>,
 }
 
 // ── Countdowns ────────────────────────────────────────────────────
@@ -359,6 +361,8 @@ pub struct QueueItem {
     pub queue_position: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_at: Option<DateTime<Utc>>,
 }
 
 /// Abbreviated info about the currently displayed queue item.
@@ -517,6 +521,7 @@ pub struct CreateMessageRequest {
     pub expires_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<MessageTemplate>,
+    pub display_at: Option<DateTime<Utc>>,
 }
 
 /// Request body for PUT /api/messages/:id.
@@ -529,6 +534,7 @@ pub struct UpdateMessageRequest {
     pub v_align: Option<VAlign>,
     pub queue_position: Option<i64>,
     pub expires_at: Option<Option<DateTime<Utc>>>,
+    pub display_at: Option<Option<DateTime<Utc>>>,
 }
 
 /// Request body for POST /api/countdowns.
@@ -594,6 +600,15 @@ pub struct HealthResponse {
     pub version: String,
     pub uptime_seconds: u64,
     pub queue_size: usize,
+}
+
+/// Server statistics response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatsResponse {
+    pub connected_viewers: usize,
+    pub uptime_secs: u64,
+    pub total_messages: usize,
+    pub total_countdowns: usize,
 }
 
 /// Standard error response body.

@@ -54,6 +54,7 @@ pub async fn create(
         queue_position: position,
         created_at: Utc::now(),
         expires_at: req.expires_at,
+        display_at: req.display_at,
     };
 
     db::create_message(state.pool(), &msg).await?;
