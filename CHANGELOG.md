@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Message templates: Announcement (centered text), Greeting (two-part split with top/bottom lines), Countdown (label on top row), and Ticker (left-aligned, truncated to 22 chars)
+- `--template` flag for `herald push` to apply a template layout (`announcement`, `greeting`, `countdown`, `ticker`)
+- Template selector dropdown in the web admin message composer with live preview support
+- `template` field on the message creation API (`POST /api/messages`) — when provided alongside `text`, the server uses the template layout instead of default alignment
+- Comprehensive deployment guide (`docs/DEPLOYMENT.md`) covering Docker Compose quickstart, bare-metal install with systemd, environment variable reference, SQLite backup/restore, reverse proxy setup, TLS/HTTPS, upgrading, and troubleshooting
+- Example nginx reverse proxy configuration (`examples/nginx.conf`) with WebSocket upgrade, TLS, gzip, and forwarded headers
+- Example Caddy reverse proxy configuration (`examples/Caddyfile`) with automatic Let's Encrypt TLS
 - Optional mechanical "clack" sound effect on web tile flips using the Web Audio API — programmatic noise-burst synthesis with band-pass filter, staggered per-column to match the visual cascade
 - Mute/unmute toggle button (🔊/🔇) in the bottom-left corner of the web viewer — persists preference in `localStorage`, keyboard-focusable with `aria-label`, respects `prefers-reduced-motion`
 - Board theme system with three built-in themes: **Classic** (black background, warm yellow text), **Dark** (dark gray background, white text — default), and **Custom** (user-defined hex colors via config)
