@@ -214,6 +214,45 @@ impl Grid {
         Ok(grid)
     }
 
+    /// Build a grid from a named template and text content.
+    pub fn from_template(template: MessageTemplate, text: &str) -> Result<Self, String> {
+        match template {
+            MessageTemplate::Announcement => Self::from_text(text, HAlign::Center, VAlign::Middle),
+            MessageTemplate::Greeting => {
+                let mut grid = Self::blank();
+                if let Some((top, bottom)) = text.split_once('\n') {
+                    let top_chars: Vec<char> = Self::wrap_text(top).into_iter().flatten().collect();
+                    let bottom_chars: Vec<char> =
+                        Self::wrap_text(bottom).into_iter().flatten().collect();
+                    Self::place_line(&mut grid.0[1], &top_chars, HAlign::Center);
+                    Self::place_line(&mut grid.0[3], &bottom_chars, HAlign::Center);
+                } else {
+                    let chars: Vec<char> = Self::wrap_text(text).into_iter().flatten().collect();
+                    Self::place_line(&mut grid.0[2], &chars, HAlign::Center);
+                }
+                Ok(grid)
+            }
+            MessageTemplate::Countdown => {
+                let mut grid = Self::blank();
+                let chars: Vec<char> = Self::wrap_text(text).into_iter().flatten().collect();
+                Self::place_line(&mut grid.0[1], &chars, HAlign::Center);
+                Ok(grid)
+            }
+            MessageTemplate::Ticker => {
+                let mut grid = Self::blank();
+                let normalized: Vec<char> = text
+                    .chars()
+                    .map(|c| Self::normalize_char(c).unwrap_or(' '))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .take(BOARD_COLS)
+                    .collect();
+                Self::place_line(&mut grid.0[2], &normalized, HAlign::Left);
+                Ok(grid)
+            }
+        }
+    }
+
     /// Compare two grids and return the (row, col) positions of cells that differ.
     pub fn diff_grids(old: &Grid, new: &Grid) -> Vec<(usize, usize)> {
         let mut diffs = Vec::new();
@@ -237,6 +276,24 @@ impl Default for Grid {
     fn default() -> Self {
         Self::blank()
     }
+}
+
+// ── Message templates ─────────────────────────────────────────────
+
+/// Predefined layout templates for common message patterns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageTemplate {
+    /// Centered text, default alignment — basic message display.
+    Announcement,
+    /// Two-part greeting: small top line + large centered bottom line.
+    /// Text is split on the first newline: "HAPPY\nBIRTHDAY" → "HAPPY" on row 1, "BIRTHDAY" centered on row 3.
+    Greeting,
+    /// Label on top, large countdown placeholder below.
+    /// Text is the label; the countdown timer is rendered separately by the countdown system.
+    Countdown,
+    /// Placeholder for future scrolling text. For now, renders as left-aligned text on the middle row.
+    Ticker,
 }
 
 // ── Messages ──────────────────────────────────────────────────────
@@ -458,6 +515,8 @@ pub struct CreateMessageRequest {
     pub v_align: VAlign,
     pub queue_position: Option<i64>,
     pub expires_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<MessageTemplate>,
 }
 
 /// Request body for PUT /api/messages/:id.

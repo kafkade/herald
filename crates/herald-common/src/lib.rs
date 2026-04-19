@@ -177,6 +177,67 @@ mod tests {
         }
     }
 
+    // ── from_template tests ─────────────────────────────────────────
+
+    #[test]
+    fn from_template_announcement() {
+        let grid = Grid::from_template(MessageTemplate::Announcement, "HELLO WORLD").unwrap();
+        // Same as from_text centered/middle
+        let expected = Grid::from_text("HELLO WORLD", HAlign::Center, VAlign::Middle).unwrap();
+        assert_eq!(grid, expected);
+    }
+
+    #[test]
+    fn from_template_greeting_with_newline() {
+        let grid = Grid::from_template(MessageTemplate::Greeting, "HAPPY\nBIRTHDAY").unwrap();
+        assert_eq!(row_text(&grid, 1), "HAPPY");
+        assert_eq!(row_text(&grid, 3), "BIRTHDAY");
+        // Other rows blank
+        for r in [0, 2, 4, 5] {
+            assert_eq!(row_text(&grid, r), "", "row {r} should be blank");
+        }
+    }
+
+    #[test]
+    fn from_template_greeting_without_newline() {
+        let grid = Grid::from_template(MessageTemplate::Greeting, "CONGRATS").unwrap();
+        assert_eq!(row_text(&grid, 2), "CONGRATS");
+        for r in [0, 1, 3, 4, 5] {
+            assert_eq!(row_text(&grid, r), "", "row {r} should be blank");
+        }
+    }
+
+    #[test]
+    fn from_template_countdown() {
+        let grid = Grid::from_template(MessageTemplate::Countdown, "LAUNCH IN").unwrap();
+        assert_eq!(row_text(&grid, 1), "LAUNCH IN");
+        // Rows 2-5 blank (row 0 also blank)
+        for r in [0, 2, 3, 4, 5] {
+            assert_eq!(row_text(&grid, r), "", "row {r} should be blank");
+        }
+    }
+
+    #[test]
+    fn from_template_ticker() {
+        let grid = Grid::from_template(MessageTemplate::Ticker, "BREAKING NEWS").unwrap();
+        let text = row_text(&grid, 2);
+        assert_eq!(text, "BREAKING NEWS");
+        // Check it's left-aligned (starts at col 0)
+        assert_eq!(grid.0[2][0], CellContent::Char('B'));
+        // Other rows blank
+        for r in [0, 1, 3, 4, 5] {
+            assert_eq!(row_text(&grid, r), "", "row {r} should be blank");
+        }
+    }
+
+    #[test]
+    fn from_template_ticker_truncated() {
+        let long = "A".repeat(30);
+        let grid = Grid::from_template(MessageTemplate::Ticker, &long).unwrap();
+        let text = row_text(&grid, 2);
+        assert_eq!(text.len(), BOARD_COLS); // truncated to 22
+    }
+
     #[test]
     fn test_diff_grids_identical() {
         let a = Grid::blank();

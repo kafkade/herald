@@ -1,256 +1,159 @@
 # Herald — Deployment Guide
 
-> **Note:** Docker deployment (Dockerfile, docker-compose.yml) is implemented and ready for use. Systemd service units and reverse proxy configurations are planned for a future release. See also the [README](../README.md) Quick Start section.
+This guide covers deploying Herald from a 5-minute Docker quickstart to production bare-metal installs with reverse proxies and TLS.
 
-This guide covers everything you need to deploy Herald, from Docker containers to bare-metal installs. By the end, you should have a running Herald instance accessible via web browser or CLI viewer.
-
-For architecture details, see [ARCHITECTURE.md](./ARCHITECTURE.md). For the full system spec, see [SPEC.md](./SPEC.md). For design decisions behind these choices, see [DECISIONS.md](./DECISIONS.md).
+For architecture details, see [ARCHITECTURE.md](./ARCHITECTURE.md). For the full system spec, see [SPEC.md](./SPEC.md).
 
 ---
 
 ## Table of Contents
 
-- [1. Prerequisites](#1-prerequisites)
-- [2. Docker Deployment (Recommended)](#2-docker-deployment-recommended)
-  - [2.1 Dockerfile](#21-dockerfile)
-  - [2.2 Docker Compose](#22-docker-compose)
-  - [2.3 Running with Docker Compose](#23-running-with-docker-compose)
-- [3. Bare Metal Deployment](#3-bare-metal-deployment)
-  - [3.1 Build from Source](#31-build-from-source)
-  - [3.2 Run the Server](#32-run-the-server)
-  - [3.3 Systemd Service (Linux)](#33-systemd-service-linux)
-- [4. Configuration](#4-configuration)
-  - [4.1 Configuration File (herald.toml)](#41-configuration-file-heraldtoml)
-  - [4.2 Environment Variable Overrides](#42-environment-variable-overrides)
+- [1. Docker Compose Quickstart](#1-docker-compose-quickstart)
+- [2. Bare-Metal Installation](#2-bare-metal-installation)
+  - [2.1 Download from GitHub Releases](#21-download-from-github-releases)
+  - [2.2 Build from Source](#22-build-from-source)
+  - [2.3 Systemd Service](#23-systemd-service)
+- [3. Environment Variable Reference](#3-environment-variable-reference)
+- [4. SQLite Database](#4-sqlite-database)
+  - [4.1 Location & Creation](#41-location--creation)
+  - [4.2 Backup](#42-backup)
+  - [4.3 Restore](#43-restore)
 - [5. Reverse Proxy Configuration](#5-reverse-proxy-configuration)
-  - [5.1 Nginx](#51-nginx)
-  - [5.2 Caddy](#52-caddy)
-- [6. Persistent Data](#6-persistent-data)
-- [7. Updating](#7-updating)
-- [8. Monitoring & Health](#8-monitoring--health)
-- [9. Security Considerations](#9-security-considerations)
+- [6. HTTPS / TLS](#6-https--tls)
+- [7. Upgrading](#7-upgrading)
+- [8. Troubleshooting](#8-troubleshooting)
 
 ---
 
-## 1. Prerequisites
+## 1. Docker Compose Quickstart
 
-Depending on your deployment method, you'll need:
+Get Herald running in under 5 minutes.
 
-### For Docker deployment (recommended)
+### Prerequisites
 
-- **Docker Engine** 20.10+ and **Docker Compose** v2+
-- No Rust toolchain required — everything builds inside the container
+- Docker Engine 20.10+ and Docker Compose v2+
 
-### For bare-metal deployment
+### Steps
 
-- **Rust toolchain** — install via [rustup](https://rustup.rs/):
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
-- **wasm32-unknown-unknown target** (for building the web frontend):
-  ```bash
-  rustup target add wasm32-unknown-unknown
-  ```
-- **Trunk** (Wasm build tool for the Leptos frontend):
-  ```bash
-  cargo install trunk
-  ```
-- **Build essentials** — a C linker and standard build tools (`build-essential` on Debian/Ubuntu, `base-devel` on Arch, Xcode Command Line Tools on macOS)
+**1. Clone the repository:**
 
-### Optional (recommended for production)
-
-- **Reverse proxy** — Nginx or Caddy for TLS termination, static asset caching, and WebSocket proxying
-- **A domain name** — for HTTPS via Let's Encrypt (Caddy handles this automatically)
-
----
-
-## 2. Docker Deployment (Recommended)
-
-Docker is the simplest way to deploy Herald. The multi-stage Dockerfile builds the server binary and web frontend inside containers, producing a minimal runtime image.
-
-### 2.1 Dockerfile
-
-Place this `Dockerfile` in the repository root:
-
-```dockerfile
-# =============================================================================
-# Stage 1: Build the Herald server binary
-# =============================================================================
-FROM rust:latest AS server-builder
-
-WORKDIR /app
-COPY . .
-
-RUN cargo build --release -p herald-server
-
-# =============================================================================
-# Stage 2: Build the Leptos/Wasm web frontend
-# =============================================================================
-FROM rust:latest AS web-builder
-
-# Install the wasm32 target and Trunk
-RUN rustup target add wasm32-unknown-unknown \
-    && cargo install trunk
-
-WORKDIR /app
-COPY . .
-
-RUN cd herald-web && trunk build --release
-
-# =============================================================================
-# Stage 3: Minimal runtime image
-# =============================================================================
-FROM debian:bookworm-slim AS runtime
-
-# Install runtime dependencies (OpenSSL, CA certificates)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create a non-root user
-RUN useradd --create-home --shell /bin/bash herald
-
-WORKDIR /home/herald
-
-# Copy the server binary from stage 1
-COPY --from=server-builder /app/target/release/herald /usr/local/bin/herald
-
-# Copy the built web assets from stage 2
-COPY --from=web-builder /app/herald-web/dist /home/herald/static
-
-# Create the data directory for SQLite
-RUN mkdir -p /data && chown herald:herald /data
-
-USER herald
-
-# Default configuration via environment variables
-ENV HERALD_SERVER__BIND_ADDRESS="0.0.0.0" \
-    HERALD_SERVER__PORT="3000" \
-    HERALD_DATABASE__PATH="/data/herald.db" \
-    HERALD_WEB__STATIC_DIR="/home/herald/static"
-
-EXPOSE 3000
-
-ENTRYPOINT ["herald", "serve"]
+```bash
+git clone https://github.com/kafkade/herald.git
+cd herald
 ```
 
-> **Note:** The example above uses the old double-underscore (`HERALD_SERVER__PORT`) env var format and a simplified build. See the actual `Dockerfile` in the repository root for the current implementation, which uses `cargo-chef` for cached dependency builds, flat env vars (`HERALD_PORT`, `HERALD_DB_PATH`, etc.), and `curl` for health checks.
+**2. Create a `.env` file** (optional — sane defaults are provided):
 
-### 2.2 Docker Compose
-
-Create a `docker-compose.yml` in the repository root:
-
-```yaml
-services:
-  herald:
-    build: .
-    ports:
-      - "3000:3000"
-    volumes:
-      - herald_data:/data
-    environment:
-      HERALD_AUTH__ADMIN_TOKEN: "your-secret-token-here"
-      HERALD_DATABASE__PATH: "/data/herald.db"
-      HERALD_SERVER__BIND_ADDRESS: "0.0.0.0"
-      HERALD_SERVER__PORT: "3000"
-    restart: unless-stopped
-
-volumes:
-  herald_data:
+```bash
+cp .env.example .env
 ```
 
-> **Note:** The example above uses the old double-underscore env var format (`HERALD_AUTH__ADMIN_TOKEN`, `HERALD_SERVER__PORT`, etc.). The actual `docker-compose.yml` in the repository root uses the flat format (`HERALD_ADMIN_TOKEN`, `HERALD_PORT`, `HERALD_DB_PATH`, `HERALD_WEB_DIR`, `HERALD_LOG_LEVEL`). See that file for the current implementation.
+Edit `.env` and set a strong admin token:
 
-> **Important:** Replace `your-secret-token-here` with a strong, random token. Generate one with:
-> ```bash
-> openssl rand -hex 32
-> ```
+```bash
+# Generate a secure token
+openssl rand -hex 32
 
-### 2.3 Running with Docker Compose
+# Paste it into .env
+HERALD_ADMIN_TOKEN=<your-generated-token>
+```
 
-**Start Herald:**
+**3. Start Herald:**
 
 ```bash
 docker compose up -d
 ```
 
-**View logs:**
+> **Using the pre-built image:** To skip building from source, edit `docker-compose.yml` and replace `build: .` with:
+> ```yaml
+> image: ghcr.io/kafkade/herald:latest
+> ```
+
+**4. Verify it's running:**
 
 ```bash
-docker compose logs -f herald
+curl http://localhost:3000/api/health
 ```
 
-**Stop Herald:**
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
+**5. Open the web UI** at [http://localhost:3000](http://localhost:3000).
+
+### Managing the container
 
 ```bash
-docker compose down
+docker compose logs -f herald     # Stream logs
+docker compose restart herald     # Restart
+docker compose down               # Stop and remove container (data persists in volume)
+docker compose up -d --build      # Rebuild after code changes
 ```
 
-**Rebuild after code changes:**
-
-```bash
-docker compose up -d --build
-```
-
-#### Volume Mount
-
-The `herald_data` named volume persists the SQLite database at `/data/herald.db` inside the container. This ensures your messages, countdowns, and configuration survive container restarts and rebuilds.
-
-To back up the database:
-
-```bash
-docker compose exec herald cp /data/herald.db /data/herald.db.bak
-# Or copy to host:
-docker cp $(docker compose ps -q herald):/data/herald.db ./herald-backup.db
-```
-
-#### Environment Variables
-
-All Herald configuration can be set via environment variables in the `docker-compose.yml`. See [Section 4.2](#42-environment-variable-overrides) for the full list. Environment variables override any values in `herald.toml`.
+The `docker-compose.yml` in the repository root defines a `herald_data` named volume mounted at `/data` for SQLite persistence. Your data survives container restarts and rebuilds.
 
 ---
 
-## 3. Bare Metal Deployment
+## 2. Bare-Metal Installation
 
-### 3.1 Build from Source
+### 2.1 Download from GitHub Releases
+
+Download a pre-built binary from [GitHub Releases](https://github.com/kafkade/herald/releases):
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/herald.git
+# Example for Linux x86_64 — adjust the URL for your platform/version
+curl -Lo herald-server https://github.com/kafkade/herald/releases/latest/download/herald-server-linux-amd64
+chmod +x herald-server
+sudo mv herald-server /usr/local/bin/
+```
+
+### 2.2 Build from Source
+
+If no pre-built binary is available for your platform:
+
+```bash
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Clone and build
+git clone https://github.com/kafkade/herald.git
 cd herald
-
-# Build the server binary (release mode)
 cargo build --release -p herald-server
-
-# Build the web frontend (Wasm)
-cd herald-web
-trunk build --release
-cd ..
 ```
 
-After building:
-- The server binary is at `./target/release/herald`
-- The web assets are at `./herald-web/dist/`
+The binary is at `./target/release/herald-server`.
 
-### 3.2 Run the Server
+### Run manually
 
 ```bash
-# Copy the web assets to a known location
-mkdir -p ./static
-cp -r ./herald-web/dist/* ./static/
-
-# Run with a config file
-./target/release/herald serve --config herald.toml
-
-# Or run with environment variables
-HERALD_AUTH__ADMIN_TOKEN="your-secret-token" \
-HERALD_WEB__STATIC_DIR="./static" \
-  ./target/release/herald serve
+# Set environment and run
+export HERALD_ADMIN_TOKEN=$(openssl rand -hex 32)
+export HERALD_DB_PATH=/var/lib/herald/herald.db
+export HERALD_WEB_DIR=/opt/herald/static
+herald-server
 ```
 
-The server needs to know where the built web assets are. Set the `static_dir` in `herald.toml` or via the `HERALD_WEB__STATIC_DIR` environment variable. Point it to the directory containing the Trunk build output (the `index.html`, `.wasm`, and `.js` files).
+Herald listens on port 3000 by default and creates the SQLite database automatically on first run.
 
-### 3.3 Systemd Service (Linux)
+### 2.3 Systemd Service
+
+Create a dedicated user and directories:
+
+```bash
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin herald
+sudo mkdir -p /opt/herald/data /opt/herald/static
+sudo chown -R herald:herald /opt/herald
+```
+
+Copy the binary and web assets into place:
+
+```bash
+sudo cp target/release/herald-server /usr/local/bin/
+# If you built the web frontend:
+sudo cp -r crates/herald-web/dist/* /opt/herald/static/
+```
 
 Create `/etc/systemd/system/herald.service`:
 
@@ -263,15 +166,17 @@ After=network.target
 Type=simple
 User=herald
 Group=herald
-WorkingDirectory=/opt/herald
-ExecStart=/opt/herald/herald serve --config /opt/herald/herald.toml
+ExecStart=/usr/local/bin/herald-server
 Restart=on-failure
 RestartSec=5
 
-# Environment overrides (optional — can also use herald.toml)
-Environment=HERALD_AUTH__ADMIN_TOKEN=your-secret-token-here
-Environment=HERALD_DATABASE__PATH=/opt/herald/data/herald.db
-Environment=HERALD_WEB__STATIC_DIR=/opt/herald/static
+# Environment
+Environment=HERALD_ADMIN_TOKEN=<your-secret-token>
+Environment=HERALD_DB_PATH=/opt/herald/data/herald.db
+Environment=HERALD_WEB_DIR=/opt/herald/static
+Environment=HERALD_PORT=3000
+Environment=HERALD_LOG_LEVEL=info
+Environment=HERALD_LOG_FORMAT=json
 
 # Hardening
 NoNewPrivileges=true
@@ -283,450 +188,287 @@ ReadWritePaths=/opt/herald/data
 WantedBy=multi-user.target
 ```
 
-Set up and start the service:
+Enable and start:
 
 ```bash
-# Create the herald user
-sudo useradd --system --create-home --home-dir /opt/herald herald
-
-# Copy files into place
-sudo cp target/release/herald /opt/herald/
-sudo cp -r herald-web/dist /opt/herald/static
-sudo cp herald.toml /opt/herald/
-sudo mkdir -p /opt/herald/data
-sudo chown -R herald:herald /opt/herald
-
-# Enable and start
 sudo systemctl daemon-reload
-sudo systemctl enable herald
-sudo systemctl start herald
+sudo systemctl enable --now herald
 
-# Check status
+# Verify
 sudo systemctl status herald
+curl http://localhost:3000/api/health
+```
+
+View logs:
+
+```bash
 sudo journalctl -u herald -f
 ```
 
 ---
 
-## 4. Configuration
+## 3. Environment Variable Reference
 
-Herald uses a layered configuration system. Values are resolved in this order (later overrides earlier):
+All configuration is via environment variables. No config file is required.
 
-1. **Built-in defaults** — sensible defaults for all settings
-2. **Configuration file** (`herald.toml`) — primary configuration source
-3. **Environment variables** (`HERALD_*`) — overrides for deployment-specific values
-4. **CLI flags** — one-off overrides for the current run
+| Variable | Description | Default |
+|---|---|---|
+| `HERALD_ADMIN_TOKEN` | Bearer token for admin API authentication. If unset, a random UUID is generated and logged at startup. | *(auto-generated)* |
+| `HERALD_PORT` | HTTP listen port. | `3000` |
+| `HERALD_DB_PATH` | Path to the SQLite database file. Created automatically if it doesn't exist. | `herald.db` |
+| `HERALD_WEB_DIR` | Directory containing built web frontend assets (index.html, WASM, etc.). Set to empty to disable web UI. | `./web-dist` |
+| `HERALD_LOG_LEVEL` | Log verbosity: `trace`, `debug`, `info`, `warn`, `error`. | `info` |
+| `HERALD_LOG_FORMAT` | Log output format: `json` (structured, for production) or `pretty` (human-readable). | `pretty` |
 
-### 4.1 Configuration File (herald.toml)
-
-Below is a complete example `herald.toml` with all available parameters. Uncomment and modify values as needed:
-
-```toml
-# =============================================================================
-# Herald Configuration
-# =============================================================================
-# All values shown are the defaults. Uncomment and change as needed.
-# Environment variables override these values (see DEPLOYMENT.md § 4.2).
-
-# -----------------------------------------------------------------------------
-# Server settings
-# -----------------------------------------------------------------------------
-[server]
-# Address to bind the HTTP server to.
-# Use "0.0.0.0" to listen on all interfaces (required for Docker).
-# Use "127.0.0.1" to restrict to localhost only.
-bind_address = "0.0.0.0"
-
-# Port for the HTTP server.
-port = 3000
-
-# -----------------------------------------------------------------------------
-# Database settings
-# -----------------------------------------------------------------------------
-[database]
-# Path to the SQLite database file.
-# The file is created automatically on first run.
-# For Docker, mount a volume at this path for persistence.
-path = "./herald.db"
-
-# -----------------------------------------------------------------------------
-# Authentication
-# -----------------------------------------------------------------------------
-[auth]
-# Bearer token for admin API access.
-# All admin endpoints require: Authorization: Bearer <this-token>
-# CHANGE THIS to a strong, random value before deploying.
-admin_token = "change-me-to-a-secure-token"
-
-# -----------------------------------------------------------------------------
-# Rotation settings
-# -----------------------------------------------------------------------------
-[rotation]
-# Seconds each message/countdown is displayed before rotating to the next.
-interval_seconds = 30
-
-# How often countdown timers refresh their display (in seconds).
-countdown_refresh_seconds = 1
-
-# -----------------------------------------------------------------------------
-# Board settings
-# -----------------------------------------------------------------------------
-[board]
-# Default text alignment for messages: "left", "center", or "right".
-default_alignment = "center"
-
-# What happens when a countdown reaches zero:
-#   "show_message" — display the countdown's associated message
-#   "remove"       — remove the countdown from the rotation queue
-countdown_zero_behavior = "show_message"
-
-# -----------------------------------------------------------------------------
-# Web frontend settings
-# -----------------------------------------------------------------------------
-[web]
-# Enable the admin web interface.
-admin_enabled = true
-
-# Path to the directory containing the built web frontend assets
-# (index.html, .wasm, .js files from `trunk build`).
-static_dir = "./static"
-
-# -----------------------------------------------------------------------------
-# WebSocket settings
-# -----------------------------------------------------------------------------
-[websocket]
-# Interval (in seconds) between server-sent heartbeat pings.
-# Clients that don't respond within this interval may be disconnected.
-heartbeat_seconds = 30
-
-# URL path for the WebSocket endpoint.
-path = "/ws"
-```
-
-### 4.2 Environment Variable Overrides
-
-Environment variables follow the pattern `HERALD_<SECTION>__<KEY>` — note the **double underscore** (`__`) separating nested TOML table names from key names.
-
-> **Note:** The current Herald server implementation uses **flat** environment variable names instead of the double-underscore nested format shown in the table below. The actual env vars are: `HERALD_PORT`, `HERALD_DB_PATH`, `HERALD_WEB_DIR`, `HERALD_ADMIN_TOKEN`, `HERALD_LOG_LEVEL`, and `HERALD_LOG_FORMAT`. See the `Dockerfile` and `.env.example` in the repository root for the canonical list.
-
-| TOML Key                            | Environment Variable                      | Example Value             |
-|-------------------------------------|-------------------------------------------|---------------------------|
-| `server.bind_address`               | `HERALD_SERVER__BIND_ADDRESS`             | `0.0.0.0`                |
-| `server.port`                       | `HERALD_SERVER__PORT`                     | `3000`                   |
-| `database.path`                     | `HERALD_DATABASE__PATH`                   | `/data/herald.db`        |
-| `auth.admin_token`                  | `HERALD_AUTH__ADMIN_TOKEN`                | `my-secret-token`        |
-| `rotation.interval_seconds`         | `HERALD_ROTATION__INTERVAL_SECONDS`       | `30`                     |
-| `rotation.countdown_refresh_seconds`| `HERALD_ROTATION__COUNTDOWN_REFRESH_SECONDS` | `1`                   |
-| `board.default_alignment`           | `HERALD_BOARD__DEFAULT_ALIGNMENT`         | `center`                 |
-| `board.countdown_zero_behavior`     | `HERALD_BOARD__COUNTDOWN_ZERO_BEHAVIOR`   | `show_message`           |
-| `web.admin_enabled`                 | `HERALD_WEB__ADMIN_ENABLED`               | `true`                   |
-| `web.static_dir`                    | `HERALD_WEB__STATIC_DIR`                  | `./static`               |
-| `websocket.heartbeat_seconds`       | `HERALD_WEBSOCKET__HEARTBEAT_SECONDS`     | `30`                     |
-| `websocket.path`                    | `HERALD_WEBSOCKET__PATH`                  | `/ws`                    |
-
-**Example:** Override the port and admin token via environment variables:
+**Example** — override port and log level:
 
 ```bash
-HERALD_PORT=8080 HERALD_ADMIN_TOKEN="super-secret" herald-server
+HERALD_PORT=8080 HERALD_LOG_LEVEL=debug herald-server
 ```
+
+See `.env.example` in the repository root for a ready-to-copy template.
+
+---
+
+## 4. SQLite Database
+
+Herald stores all data (messages, countdowns, board state) in a single SQLite file using WAL (Write-Ahead Logging) journal mode for concurrent read performance.
+
+### 4.1 Location & Creation
+
+- Configured via `HERALD_DB_PATH` (default: `herald.db` in the working directory).
+- The file and any parent directories are created automatically on first startup.
+- Database migrations run automatically — no manual setup required.
+- In Docker, the database lives at `/data/herald.db` inside the `herald_data` volume.
+
+### 4.2 Backup
+
+**Option A — Checkpoint and copy** (safe while Herald is running):
+
+```bash
+# Force a WAL checkpoint, then copy the database
+sqlite3 /path/to/herald.db "PRAGMA wal_checkpoint(TRUNCATE);"
+cp /path/to/herald.db /path/to/backup/herald-$(date +%Y%m%d).db
+```
+
+**Option B — SQLite `.backup` command** (online backup):
+
+```bash
+sqlite3 /path/to/herald.db ".backup /path/to/backup/herald-$(date +%Y%m%d).db"
+```
+
+**Option C — Docker volume backup:**
+
+```bash
+# Copy database out of the container
+docker cp $(docker compose ps -q herald):/data/herald.db ./herald-backup.db
+```
+
+> **Tip:** Schedule daily backups with cron. The WAL checkpoint in Option A ensures the backup file is self-contained (no `-wal` or `-shm` files needed).
+
+### 4.3 Restore
+
+```bash
+# Stop Herald
+sudo systemctl stop herald   # or: docker compose down
+
+# Replace the database
+cp /path/to/backup/herald-20250101.db /path/to/herald.db
+
+# Start Herald
+sudo systemctl start herald  # or: docker compose up -d
+```
+
+Herald will pick up the restored database and apply any pending migrations automatically.
 
 ---
 
 ## 5. Reverse Proxy Configuration
 
-For production deployments, run Herald behind a reverse proxy to provide TLS termination, caching, and WebSocket upgrade handling.
+For production, run Herald behind a reverse proxy to handle TLS termination and WebSocket upgrades. Herald does not terminate TLS itself.
 
-### 5.1 Nginx
+Ready-to-use example configs are in [`examples/nginx.conf`](../examples/nginx.conf) and [`examples/Caddyfile`](../examples/Caddyfile). Copy the example config, replace `herald.example.com` with your domain, and adjust the upstream port if needed.
 
-Create `/etc/nginx/sites-available/herald`:
+Key points for any proxy:
+- Forward HTTP traffic to `localhost:3000` (or your configured port)
+- Enable WebSocket upgrades for the `/ws` path (`Upgrade` and `Connection` headers)
+- Pass `X-Forwarded-For` and `X-Forwarded-Proto` headers
 
-```nginx
-upstream herald_backend {
-    server 127.0.0.1:3000;
-}
+### Nginx
 
-server {
-    listen 80;
-    server_name herald.example.com;
+See [`examples/nginx.conf`](../examples/nginx.conf) for a complete configuration including:
+- HTTP → HTTPS redirect
+- WebSocket upgrade handling for `/ws`
+- Static asset caching
+- Let's Encrypt TLS certificate paths
 
-    # Redirect HTTP to HTTPS
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name herald.example.com;
-
-    # --- TLS Configuration ---
-    ssl_certificate     /etc/letsencrypt/live/herald.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/herald.example.com/privkey.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_ciphers         HIGH:!aNULL:!MD5;
-
-    # --- WebSocket endpoint ---
-    location /ws {
-        proxy_pass http://herald_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket timeout — keep connections alive
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-    }
-
-    # --- API and static assets ---
-    location / {
-        proxy_pass http://herald_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # --- Static asset caching ---
-    location ~* \.(js|wasm|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-        proxy_pass http://herald_backend;
-        proxy_set_header Host $host;
-        expires 7d;
-        add_header Cache-Control "public, immutable";
-    }
-}
-```
-
-Enable the site and reload Nginx:
+Quick setup:
 
 ```bash
+sudo cp examples/nginx.conf /etc/nginx/sites-available/herald
 sudo ln -s /etc/nginx/sites-available/herald /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+# Edit server_name and certificate paths
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### 5.2 Caddy
+### Caddy
 
-Caddy provides automatic HTTPS via Let's Encrypt with zero configuration. Create a `Caddyfile`:
+See [`examples/Caddyfile`](../examples/Caddyfile) for a complete configuration. Caddy is the simplest option — it automatically obtains and renews Let's Encrypt certificates and handles WebSocket upgrades with no extra configuration:
 
 ```caddyfile
 herald.example.com {
-    # Reverse proxy all traffic to Herald
     reverse_proxy localhost:3000
-
-    # Static asset caching
-    @static path *.js *.wasm *.css *.png *.jpg *.ico *.svg *.woff *.woff2
-    header @static Cache-Control "public, max-age=604800, immutable"
 }
 ```
 
-That's it. Caddy automatically:
-- Obtains and renews TLS certificates from Let's Encrypt
-- Handles WebSocket upgrade headers (no special configuration needed)
-- Proxies all requests to Herald
-
-Run Caddy:
-
 ```bash
-sudo caddy start --config /etc/caddy/Caddyfile
+sudo cp examples/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
 ```
 
 ---
 
-## 6. Persistent Data
+## 6. HTTPS / TLS
 
-### SQLite Database
+Herald does not handle TLS directly. Use a reverse proxy with [Let's Encrypt](https://letsencrypt.org/) for free, automated certificates.
 
-Herald stores all data in a single SQLite file. By default, this is `./herald.db` (relative to the working directory), configurable via `database.path` in `herald.toml` or the `HERALD_DB_PATH` environment variable.
+**Caddy** (recommended — zero-config TLS):
 
-**First run:** The database file is created automatically. Herald runs all pending migrations on startup — no manual setup required.
+Caddy automatically provisions and renews certificates. Just point your domain at the server and use the Caddyfile from [Section 5](#5-reverse-proxy-configuration).
 
-**Backup strategy:** SQLite databases are single files. To back up:
+**Nginx + Certbot:**
 
 ```bash
-# Simple file copy (stop Herald first for consistency, or use SQLite's backup API)
-cp herald.db herald.db.bak
+# Install certbot
+sudo apt install certbot python3-certbot-nginx
 
-# Or use sqlite3's .backup command (safe while Herald is running)
-sqlite3 herald.db ".backup herald-backup.db"
+# Obtain certificate (follow interactive prompts)
+sudo certbot --nginx -d herald.example.com
+
+# Auto-renewal is configured automatically — verify:
+sudo certbot renew --dry-run
 ```
 
-### Docker Volume Best Practices
-
-- **Always use a named volume** (as shown in the Docker Compose example) to persist data across container rebuilds.
-- **Never store the database inside the container's writable layer** — it will be lost on `docker compose down`.
-- The volume mount point should match `HERALD_DB_PATH` (default: `/data/herald.db`).
-
-```yaml
-volumes:
-  - herald_data:/data    # Named volume — persists across rebuilds
-  # - ./data:/data       # Bind mount — alternative, stores on host filesystem
-```
+Update the Nginx config to reference the generated certificate paths. See [`examples/nginx.conf`](../examples/nginx.conf) for the full TLS configuration.
 
 ---
 
-## 7. Updating
+## 7. Upgrading
+
+### Before you upgrade
+
+1. **Back up the database** (see [Section 4.2](#42-backup)):
+   ```bash
+   sqlite3 /path/to/herald.db ".backup herald-pre-upgrade.db"
+   ```
+2. **Check the [release notes](https://github.com/kafkade/herald/releases)** for breaking changes or required migration steps.
 
 ### Docker
 
 ```bash
-# Pull latest changes and rebuild
 cd herald
-git pull
-docker compose up -d --build
 
-# Or if using a pre-built image from a registry:
+# If using the pre-built image:
 docker compose pull
 docker compose up -d
+
+# If building from source:
+git pull
+docker compose up -d --build
 ```
 
-### Bare Metal
+### Bare metal
 
 ```bash
-cd herald
+# Download or build the new binary
+# Option A: Download from releases
+curl -Lo herald-server https://github.com/kafkade/herald/releases/latest/download/herald-server-linux-amd64
+chmod +x herald-server
+sudo mv herald-server /usr/local/bin/
+
+# Option B: Build from source
 git pull
-
-# Rebuild the server
 cargo build --release -p herald-server
-
-# Rebuild the web frontend
-cd herald-web
-trunk build --release
-cd ..
-
-# Copy updated assets
-cp -r herald-web/dist/* /opt/herald/static/
-cp target/release/herald /opt/herald/
+sudo cp target/release/herald-server /usr/local/bin/
 
 # Restart the service
 sudo systemctl restart herald
 ```
 
-### Database Migrations
+### After upgrading
 
-Herald runs database migrations automatically on server startup. When you update to a new version:
+Verify the new version is running:
 
-1. The server detects pending migrations
-2. Migrations are applied in order before the server begins accepting requests
-3. No manual `migrate` command is needed
+```bash
+curl http://localhost:3000/api/health
+```
 
-> **Tip:** Back up your database before updating to a new version, in case a migration needs to be rolled back.
+Database migrations run automatically on startup — no manual steps required.
 
 ---
 
-## 8. Monitoring & Health
+## 8. Troubleshooting
 
-### Health Endpoint
+### Connection refused on port 3000
 
-Herald exposes a health check endpoint:
-
-```
-GET /api/health
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "status": "ok",
-  "version": "0.1.0",
-  "uptime_seconds": 3600
-}
-```
-
-Use this for:
-- Docker `HEALTHCHECK` directives
-- Load balancer health checks
-- Uptime monitoring (e.g., UptimeRobot, Healthchecks.io)
-
-**Docker Compose healthcheck example:**
-
-```yaml
-services:
-  herald:
-    # ... other config ...
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-```
-
-### Logs
-
-Herald logs to stdout in a structured format. Key things to watch for:
-
-| Log Level | What It Means                                          |
-|-----------|--------------------------------------------------------|
-| `INFO`    | Server started, client connected/disconnected, rotation events |
-| `WARN`    | Failed authentication attempts, WebSocket errors, config issues |
-| `ERROR`   | Database errors, unrecoverable failures, bind failures |
-
-Set the log level via the `RUST_LOG` environment variable:
-
-```bash
-# Show info and above (default)
-RUST_LOG=info herald serve
-
-# Verbose debugging
-RUST_LOG=debug herald serve
-
-# Herald-specific debug logs only
-RUST_LOG=herald=debug herald serve
-```
-
-### Connected Viewers
-
-The admin API provides information about connected viewers:
-
-```bash
-curl -H "Authorization: Bearer <token>" http://localhost:3000/api/admin/viewers
-```
-
-This returns the number of active WebSocket connections (both CLI and web viewers).
-
----
-
-## 9. Security Considerations
-
-### Admin Token
-
-- **Always change the default token** before deploying. Use a cryptographically random value:
+- **Is Herald running?**
   ```bash
-  openssl rand -hex 32
+  sudo systemctl status herald
+  # or
+  docker compose ps
   ```
-- Store the token in an environment variable, not in a config file committed to version control.
-- Rotate the token by changing the env var and restarting Herald.
-
-### TLS / HTTPS
-
-- **Always run behind a reverse proxy with TLS** in production. Herald itself does not handle TLS — use Nginx or Caddy (see [Section 5](#5-reverse-proxy-configuration)).
-- Caddy provides automatic HTTPS with zero configuration.
-- For Nginx, use Let's Encrypt with Certbot for free certificates.
-
-### Network Binding
-
-- In production behind a reverse proxy, bind Herald to `127.0.0.1` so it's only accessible via the proxy:
-  ```toml
-  [server]
-  bind_address = "127.0.0.1"
-  ```
-- In Docker, bind to `0.0.0.0` inside the container (the default) — Docker's network isolation provides the boundary.
-
-### SQLite File Permissions
-
-- The database file contains all messages and configuration. Restrict file permissions:
+- **Is the port correct?** Check `HERALD_PORT` in your environment or `.env` file.
+- **Firewall?** Ensure port 3000 (or your custom port) is open:
   ```bash
-  chmod 600 herald.db
-  chown herald:herald herald.db
+  sudo ufw allow 3000/tcp
   ```
-- In Docker, the non-root `herald` user owns the data directory.
 
-### General Recommendations
+### 401 Unauthorized on admin endpoints
 
-- Keep Herald updated to get security fixes.
-- Use the systemd hardening options shown in [Section 3.3](#33-systemd-service-linux) (`NoNewPrivileges`, `ProtectSystem`, `ProtectHome`).
-- Monitor failed authentication attempts in the logs (`WARN` level).
-- If Herald is only accessed from your local machine, bind to `127.0.0.1` and skip the reverse proxy entirely.
+- Verify you're sending the correct token:
+  ```bash
+  curl -H "Authorization: Bearer <your-token>" http://localhost:3000/api/admin/messages
+  ```
+- If `HERALD_ADMIN_TOKEN` is unset, Herald auto-generates a token and logs it at startup. Check the logs:
+  ```bash
+  docker compose logs herald | grep -i token
+  # or
+  sudo journalctl -u herald | grep -i token
+  ```
+- The `Authorization` header must use the format `Bearer <token>` (note the space after "Bearer").
+
+### WebSocket connections failing
+
+- **Behind a proxy?** Ensure WebSocket upgrade headers are forwarded. The proxy must pass `Upgrade` and `Connection` headers for the `/ws` path. See [Section 5](#5-reverse-proxy-configuration).
+- **Timeouts?** Set a long read timeout on the proxy (e.g., `proxy_read_timeout 86400s` for Nginx).
+- **Test directly** (bypass the proxy) to isolate the issue:
+  ```bash
+  # Using websocat (install: cargo install websocat)
+  websocat ws://localhost:3000/ws
+  ```
+
+### Database locked errors
+
+- SQLite allows only one writer at a time. Herald uses WAL mode, which handles this well under normal load.
+- If you see `database is locked` errors:
+  - Ensure no other process has the database file open (e.g., a backup script with a long-held lock).
+  - Check that the `-wal` and `-shm` files exist alongside `herald.db` — don't delete them while Herald is running.
+  - Ensure the database directory has correct write permissions for the Herald user.
+
+### Port already in use
+
+- Find what's using the port:
+  ```bash
+  sudo ss -tlnp | grep 3000
+  ```
+- Either stop the conflicting process or change Herald's port:
+  ```bash
+  HERALD_PORT=3001 herald-server
+  ```
+- In Docker, update both the container and host port mapping in `docker-compose.yml` or `.env`.
+
+### High memory or CPU usage
+
+- Set `HERALD_LOG_LEVEL=warn` to reduce log output in production.
+- Ensure `HERALD_LOG_FORMAT=json` for efficient log processing.
+- Herald is lightweight by design — sustained high resource usage usually indicates an external issue (e.g., a misbehaving WebSocket client reconnecting in a tight loop).

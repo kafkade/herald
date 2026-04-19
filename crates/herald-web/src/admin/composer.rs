@@ -1,5 +1,6 @@
 use herald_common::{
-    BOARD_COLS, BOARD_ROWS, CellContent, Color, CreateMessageRequest, Grid, HAlign, VAlign,
+    BOARD_COLS, BOARD_ROWS, CellContent, Color, CreateMessageRequest, Grid, HAlign,
+    MessageTemplate, VAlign,
 };
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -10,6 +11,7 @@ use wasm_bindgen_futures::JsFuture;
 pub fn MessageComposer() -> impl IntoView {
     let text = RwSignal::new(String::new());
     let align = RwSignal::new("center".to_string());
+    let template = RwSignal::new(String::new());
     let expires = RwSignal::new(String::new());
     let toast = RwSignal::new(Option::<(String, bool)>::None);
     let is_submitting = RwSignal::new(false);
@@ -17,8 +19,11 @@ pub fn MessageComposer() -> impl IntoView {
     let preview_grid = Memo::new(move |_| {
         let t = text.get();
         let h = parse_align(&align.get());
+        let tmpl = parse_template(&template.get());
         if t.is_empty() {
             Grid::blank()
+        } else if let Some(tmpl) = tmpl {
+            Grid::from_template(tmpl, &t).unwrap_or_else(|_| Grid::blank())
         } else {
             Grid::from_text(&t, h, VAlign::default()).unwrap_or_else(|_| Grid::blank())
         }
@@ -56,6 +61,7 @@ pub fn MessageComposer() -> impl IntoView {
         };
 
         let h_align = parse_align(&align.get_untracked());
+        let template_value = parse_template(&template.get_untracked());
         let expires_str = expires.get_untracked();
         let expires_at = if expires_str.is_empty() {
             None
@@ -77,6 +83,7 @@ pub fn MessageComposer() -> impl IntoView {
             v_align: VAlign::default(),
             queue_position: None,
             expires_at,
+            template: template_value,
         };
 
         wasm_bindgen_futures::spawn_local(async move {
@@ -84,6 +91,7 @@ pub fn MessageComposer() -> impl IntoView {
                 Ok(()) => {
                     toast.set(Some(("Message pushed successfully!".to_string(), true)));
                     text.set(String::new());
+                    template.set(String::new());
                     expires.set(String::new());
                 }
                 Err(e) => {
@@ -123,6 +131,22 @@ pub fn MessageComposer() -> impl IntoView {
                 </div>
 
                 <div class="composer-row">
+                    <div class="composer-input-group">
+                        <label class="composer-label">"Template"</label>
+                        <select
+                            class="composer-select"
+                            on:change=move |ev| {
+                                template.set(event_target_value(&ev));
+                            }
+                        >
+                            <option value="" selected>"None (default)"</option>
+                            <option value="announcement">"Announcement"</option>
+                            <option value="greeting">"Greeting"</option>
+                            <option value="countdown">"Countdown"</option>
+                            <option value="ticker">"Ticker"</option>
+                        </select>
+                    </div>
+
                     <div class="composer-input-group">
                         <label class="composer-label">"Alignment"</label>
                         <select
@@ -219,6 +243,16 @@ fn parse_align(s: &str) -> HAlign {
         "left" => HAlign::Left,
         "right" => HAlign::Right,
         _ => HAlign::Center,
+    }
+}
+
+fn parse_template(s: &str) -> Option<MessageTemplate> {
+    match s {
+        "announcement" => Some(MessageTemplate::Announcement),
+        "greeting" => Some(MessageTemplate::Greeting),
+        "countdown" => Some(MessageTemplate::Countdown),
+        "ticker" => Some(MessageTemplate::Ticker),
+        _ => None,
     }
 }
 

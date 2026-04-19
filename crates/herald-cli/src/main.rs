@@ -51,6 +51,9 @@ enum Command {
         /// Expiry time in ISO-8601 format (e.g. "2025-12-31T23:59:59Z")
         #[arg(long)]
         expires: Option<String>,
+        /// Message template (announcement, greeting, countdown, ticker)
+        #[arg(long)]
+        template: Option<String>,
         /// Preview the message on the board before pushing
         #[arg(long)]
         preview: bool,
@@ -158,9 +161,15 @@ async fn main() {
             text,
             align,
             expires,
+            template,
             preview,
             api,
-        } => commands::push::run(text, api.server, api.token, align, expires, preview).await,
+        } => {
+            commands::push::run(
+                text, api.server, api.token, align, expires, template, preview,
+            )
+            .await
+        }
         Command::Countdown { command } => match command {
             CountdownCommand::Create {
                 label,

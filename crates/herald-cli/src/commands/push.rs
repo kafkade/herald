@@ -1,7 +1,8 @@
 use crate::api_client::ApiClient;
 use chrono::{DateTime, Utc};
 use herald_common::{
-    BOARD_COLS, BOARD_ROWS, CellContent, Color, CreateMessageRequest, Grid, HAlign, Message, VAlign,
+    BOARD_COLS, BOARD_ROWS, CellContent, Color, CreateMessageRequest, Grid, HAlign, Message,
+    MessageTemplate, VAlign,
 };
 use std::io::{self, BufRead, IsTerminal, Write};
 
@@ -11,6 +12,7 @@ pub async fn run(
     token: String,
     align: String,
     expires: Option<String>,
+    template: Option<String>,
     preview: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let h_align = match align.to_lowercase().as_str() {
@@ -33,8 +35,26 @@ pub async fn run(
         })
         .transpose()?;
 
+    let template = match template.as_deref() {
+        Some("announcement") => Some(MessageTemplate::Announcement),
+        Some("greeting") => Some(MessageTemplate::Greeting),
+        Some("countdown") => Some(MessageTemplate::Countdown),
+        Some("ticker") => Some(MessageTemplate::Ticker),
+        Some(other) => {
+            return Err(format!(
+                "Unknown template: {other}. Options: announcement, greeting, countdown, ticker"
+            )
+            .into());
+        }
+        None => None,
+    };
+
     if preview {
-        let grid = Grid::from_text(&text, h_align, VAlign::default())?;
+        let grid = if let Some(tmpl) = template {
+            Grid::from_template(tmpl, &text)?
+        } else {
+            Grid::from_text(&text, h_align, VAlign::default())?
+        };
         println!();
         print_grid_preview(&grid);
         println!();
@@ -59,6 +79,7 @@ pub async fn run(
         v_align: VAlign::default(),
         queue_position: None,
         expires_at,
+        template,
     };
 
     let client = ApiClient::new(&server, &token);
