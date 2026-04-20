@@ -84,14 +84,9 @@ async fn handle_connection(mut socket: WebSocket, state: AppState) {
             // Forward broadcast messages to this client
             msg = broadcast_rx.recv() => {
                 match msg {
-                    Ok(server_msg) => {
-                        match serde_json::to_string(&server_msg) {
-                            Ok(text) => {
-                                if socket.send(Message::Text(text.into())).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Err(e) => tracing::error!(client_id, "Serialize error: {e}"),
+                    Ok(json) => {
+                        if socket.send(Message::Text(json.to_string().into())).await.is_err() {
+                            break;
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {

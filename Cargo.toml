@@ -63,3 +63,12 @@ futures = "0.3"
 
 # Internal crates
 herald-common = { path = "crates/herald-common" }
+
+# Optimize WASM release builds for size
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.release.package.herald-web]
+opt-level = "z"
