@@ -4,6 +4,7 @@ dist = "dist"
 
 [watch]
 watch = ["src", "index.html"]
+ignore = ["dist"]
 
 [serve]
 port = 8080

@@ -6,6 +6,10 @@ use herald_common::{Grid, ServerMessage};
 use sqlx::SqlitePool;
 use tokio::sync::{Mutex, Notify, broadcast};
 
+// Re-export for callers that need to send raw pre-serialized messages.
+pub type BroadcastSender = broadcast::Sender<Arc<str>>;
+pub type BroadcastReceiver = broadcast::Receiver<Arc<str>>;
+
 const BROADCAST_CAPACITY: usize = 16;
 
 /// Shared application state, wrapped in Arc for cheap cloning.
@@ -18,7 +22,7 @@ struct InnerState {
     pub pool: SqlitePool,
     pub admin_token: String,
     pub started_at: Instant,
-    pub broadcast_tx: broadcast::Sender<ServerMessage>,
+    pub broadcast_tx: broadcast::Sender<Arc<str>>,
     pub viewer_count: AtomicUsize,
     pub next_client_id: AtomicU64,
     /// Guards the build-board-state → broadcast path so concurrent mutations
@@ -57,13 +61,13 @@ impl AppState {
         self.inner.started_at.elapsed().as_secs()
     }
 
-    /// Get a reference to the broadcast sender (for sending board updates).
-    pub fn broadcast_tx(&self) -> &broadcast::Sender<ServerMessage> {
+    /// Get a reference to the broadcast sender (for sending pre-serialized JSON).
+    pub fn broadcast_tx(&self) -> &broadcast::Sender<Arc<str>> {
         &self.inner.broadcast_tx
     }
 
     /// Subscribe to the broadcast channel (for new WS connections).
-    pub fn subscribe_broadcast(&self) -> broadcast::Receiver<ServerMessage> {
+    pub fn subscribe_broadcast(&self) -> BroadcastReceiver {
         self.inner.broadcast_tx.subscribe()
     }
 
@@ -105,10 +109,13 @@ impl AppState {
                     .map(|item| item.kind == herald_common::QueueItemKind::Countdown)
                     .unwrap_or(false);
 
-                let _ = self
-                    .inner
-                    .broadcast_tx
-                    .send(herald_common::ServerMessage::BoardUpdate(board_state));
+                match serde_json::to_string(&herald_common::ServerMessage::BoardUpdate(board_state))
+                {
+                    Ok(json) => {
+                        let _ = self.inner.broadcast_tx.send(Arc::from(json));
+                    }
+                    Err(e) => tracing::error!("Failed to serialize board update: {e}"),
+                }
 
                 // Send rotation metadata alongside the board update
                 match (
@@ -123,15 +130,18 @@ impl AppState {
                         } else {
                             0
                         };
-                        let _ =
-                            self.inner
-                                .broadcast_tx
-                                .send(herald_common::ServerMessage::QueueInfo {
-                                    current_index: idx,
-                                    total_items: total,
-                                    next_rotation_seconds: interval as u32,
-                                    is_countdown_active: is_countdown,
-                                });
+                        let queue_info = herald_common::ServerMessage::QueueInfo {
+                            current_index: idx,
+                            total_items: total,
+                            next_rotation_seconds: interval as u32,
+                            is_countdown_active: is_countdown,
+                        };
+                        match serde_json::to_string(&queue_info) {
+                            Ok(json) => {
+                                let _ = self.inner.broadcast_tx.send(Arc::from(json));
+                            }
+                            Err(e) => tracing::error!("Failed to serialize queue info: {e}"),
+                        }
                     }
                     _ => {
                         tracing::warn!("Failed to build queue info for broadcast");
@@ -150,18 +160,25 @@ impl AppState {
                     theme_colors: None,
                 };
                 drop(last_grid);
-                let _ = self
-                    .inner
-                    .broadcast_tx
-                    .send(herald_common::ServerMessage::BoardUpdate(fallback));
+                match serde_json::to_string(&herald_common::ServerMessage::BoardUpdate(fallback)) {
+                    Ok(json) => {
+                        let _ = self.inner.broadcast_tx.send(Arc::from(json));
+                    }
+                    Err(e) => tracing::error!("Failed to serialize fallback board update: {e}"),
+                }
             }
         }
     }
 
     /// Broadcast a message to all connected WebSocket clients.
+    /// Serializes the message once; each receiver gets a cheap Arc clone.
     pub fn broadcast(&self, msg: ServerMessage) {
-        // Ignore send errors — they just mean no receivers are connected
-        let _ = self.inner.broadcast_tx.send(msg);
+        match serde_json::to_string(&msg) {
+            Ok(json) => {
+                let _ = self.inner.broadcast_tx.send(Arc::from(json));
+            }
+            Err(e) => tracing::error!("Failed to serialize broadcast message: {e}"),
+        }
     }
 
     /// Signal the rotation task to reset its timer and re-read the interval.

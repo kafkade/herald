@@ -699,7 +699,11 @@ async fn ws_broadcast_delivers_message() {
     // Broadcast a board update through the channel
     let board_state = herald_common::BoardState::default();
     let msg = herald_common::ServerMessage::BoardUpdate(board_state);
-    state.broadcast_tx().send(msg).unwrap();
+    let json = serde_json::to_string(&msg).unwrap();
+    state
+        .broadcast_tx()
+        .send(std::sync::Arc::from(json))
+        .unwrap();
 
     // Client should receive the message
     let received = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())

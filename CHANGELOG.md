@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Countdown animations in `herald watch` now use instant card-flip instead of cycling through intermediate characters, preventing animation overlap with 1-second countdown ticks
+- WebSocket board updates are now pre-serialized once and broadcast to all viewers via `Arc<str>`, eliminating redundant per-client JSON serialization
 
 ### Fixed
 
