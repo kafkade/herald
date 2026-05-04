@@ -49,7 +49,7 @@ ratatui = "0.29"
 crossterm = "0.28"
 
 # Web (Leptos + Wasm)
-leptos = { version = "0.7", features = ["csr"] }
+leptos = { version = "0.8", features = ["csr"] }
 gloo-net = { version = "0.7", features = ["websocket"] }
 gloo-timers = { version = "0.4", features = ["futures"] }
 wasm-bindgen = "0.2"
