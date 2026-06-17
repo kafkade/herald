@@ -134,7 +134,7 @@ pub async fn update_message(
     }
 
     let sql = format!("UPDATE messages SET {} WHERE id = ?", sets.join(", "));
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
 
     for (i, val) in values.iter().enumerate() {
         if null_indices.contains(&i) {
@@ -266,7 +266,7 @@ pub async fn update_countdown(
     }
 
     let sql = format!("UPDATE countdowns SET {} WHERE id = ?", sets.join(", "));
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
     for val in &values {
         query = query.bind(val);
     }
