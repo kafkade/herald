@@ -26,7 +26,7 @@ tokio = { version = "1", features = ["full"] }
 # Web framework
 axum = { version = "0.8", features = ["json", "ws"] }
 tower = { version = "0.5" }
-tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.7", features = ["cors", "trace", "fs"] }
 tokio-tungstenite = "0.29"
 futures-util = "0.3"
 
