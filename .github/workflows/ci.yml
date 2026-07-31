@@ -28,6 +28,6 @@ jobs:
       - name: Run tests
         run: cargo test
       - name: Install Trunk
-        run: cargo install trunk
+        run: cargo install --locked trunk
       - name: Build web frontend
         run: cd crates/herald-web && trunk build --release
